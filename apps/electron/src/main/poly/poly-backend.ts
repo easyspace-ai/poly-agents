@@ -12,9 +12,11 @@ import { resolvePolySpawnEnv } from './resolve-poly-spawn-env'
 let polyChild: ChildProcess | null = null
 
 function resolvePolyBotPackageRoot(): string {
-  const bundledMarker = join(__dirname, 'resources', 'poly-bot', 'prisma', 'schema.prisma')
-  if (existsSync(bundledMarker)) {
-    return join(__dirname, 'resources', 'poly-bot')
+  const bundledRoot = join(__dirname, 'resources', 'poly-bot')
+  /** Must match the Bun entry we spawn — copy-assets may only ship prisma until a full bundle exists. */
+  const bundledEntry = join(bundledRoot, 'src', 'electron-stdio-port.ts')
+  if (existsSync(bundledEntry)) {
+    return bundledRoot
   }
   return join(__dirname, '../../../packages/poly-bot')
 }
