@@ -6,8 +6,8 @@
 import { spawn, type Subprocess } from "bun";
 import { existsSync, rmSync, cpSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join, basename } from "path";
-import * as esbuild from "esbuild";
 import { downloadUv, type Platform, type Arch } from "./build/common";
+import { childEnvWithGoMax, spawnWithOomRetry } from "./spawn-build-guard";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
@@ -197,80 +197,150 @@ function copyResources(): void {
   }
 }
 
-// Build the WhatsApp worker bundle (dist/worker.cjs). Runs the canonical
-// `scripts/build-wa-worker.ts` as a subprocess so the dev path stays in
-// sync with the packaged/CI build. Cheap (~70ms) so we always rebuild.
-async function buildWaWorker(): Promise<void> {
-  console.log("📨 Building WhatsApp worker...");
-  const proc = spawn({
-    cmd: ["bun", "run", "scripts/build-wa-worker.ts"],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    console.error("❌ WhatsApp worker build failed");
-    process.exit(1);
-  }
-}
-
-// Build MCP servers for Codex sessions and Pi agent server (one-time, no watch needed)
-async function buildMcpServers(): Promise<void> {
-  console.log("🌉 Building MCP servers and Pi agent server...");
-
-  // Ensure dist directories exist
-  const sessionDistDir = join(SESSION_SERVER_DIR, "dist");
-  const piDistDir = join(PI_AGENT_SERVER_DIR, "dist");
-  if (!existsSync(sessionDistDir)) mkdirSync(sessionDistDir, { recursive: true });
-  if (!existsSync(piDistDir)) mkdirSync(piDistDir, { recursive: true });
-
-  // Build session MCP server (esbuild, packages external — deps resolve from root node_modules)
-  const sessionResult = await runEsbuild(
-    "packages/session-mcp-server/src/index.ts",
-    "packages/session-mcp-server/dist/index.js",
-    {},
-    { packagesExternal: true }
-  );
-
-  if (!sessionResult.success) {
-    console.error("❌ Session MCP server build failed:", sessionResult.error);
-    process.exit(1);
-  }
-  console.log("✅ Session MCP server built");
-
-  // Build Pi agent server with bun (not esbuild) because its Pi SDK deps are ESM-only.
-  // esbuild with packages:external leaves them as require() calls which fail at runtime.
-  // Optional: skip if package directory is missing (e.g., not synced to OSS).
-  if (existsSync(join(PI_AGENT_SERVER_DIR, "src"))) {
-    const piResult = await buildPiAgentServer();
-    if (!piResult.success) {
-      console.error("❌ Pi agent server build failed:", piResult.error);
-      process.exit(1);
+// Session MCP server: use `bun build` (same as packages/session-mcp-server and electron-build-main.ts).
+// The esbuild JS API path intermittently fails under Bun with "Error: The service was stopped".
+async function buildSessionMcpServer(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const proc = spawn({
+      cmd: [
+        "bun",
+        "build",
+        join(SESSION_SERVER_DIR, "src/index.ts"),
+        "--outfile",
+        SESSION_SERVER_OUTPUT,
+        "--target",
+        "node",
+        "--format",
+        "cjs",
+      ],
+      cwd: ROOT_DIR,
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    const exitCode = await proc.exited;
+    if (exitCode !== 0) {
+      return { success: false, error: `bun build exited ${String(exitCode)}` };
     }
-    console.log("✅ Pi agent server built");
-  } else {
-    console.log("⏭️  Pi agent server skipped (package not found)");
+    if (!existsSync(SESSION_SERVER_OUTPUT)) {
+      return { success: false, error: `output missing: ${SESSION_SERVER_OUTPUT}` };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: String(err) };
   }
 }
 
-// Get OAuth defines for esbuild API
-function getOAuthDefines(): Record<string, string> {
-  const oauthVars = [
+/** Build-time defines for main esbuild (OAuth + Sentry + dev flag; aligns with scripts/electron-build-main.ts). */
+function getMainProcessEsbuildDefines(): Record<string, string> {
+  const names = [
     "GOOGLE_OAUTH_CLIENT_ID",
     "GOOGLE_OAUTH_CLIENT_SECRET",
     "SLACK_OAUTH_CLIENT_ID",
     "SLACK_OAUTH_CLIENT_SECRET",
     "MICROSOFT_OAUTH_CLIENT_ID",
     "MICROSOFT_OAUTH_CLIENT_SECRET",
+    "SENTRY_ELECTRON_INGEST_URL",
+    "CRAFT_DEV_RUNTIME",
   ];
-
   const defines: Record<string, string> = {};
-  for (const varName of oauthVars) {
-    const value = process.env[varName] || "";
-    defines[`process.env.${varName}`] = JSON.stringify(value);
+  for (const varName of names) {
+    defines[`process.env.${varName}`] = JSON.stringify(process.env[varName] || "");
   }
   return defines;
+}
+
+/** Resolve repo-local esbuild CLI (avoid esbuild JS API under Bun — it often dies with "The service was stopped"). */
+function resolveEsbuildBin(): string {
+  return IS_WINDOWS
+    ? join(ROOT_DIR, "node_modules", ".bin", "esbuild.cmd")
+    : join(ROOT_DIR, "node_modules", ".bin", "esbuild");
+}
+
+async function runEsbuildCli(cwd: string, args: string[]): Promise<{ success: boolean; error?: string }> {
+  const bin = resolveEsbuildBin();
+  if (!existsSync(bin)) {
+    return { success: false, error: `esbuild not found at ${bin}` };
+  }
+  try {
+    const exitCode = await spawnWithOomRetry([bin, ...args], cwd, { label: "esbuild" });
+    if (exitCode === 0) return { success: true };
+    let msg = `esbuild exited ${String(exitCode)}`;
+    if (exitCode === 137) {
+      msg +=
+        " — try export CRAFT_ESBUILD_GOMAXPROCS=1 before bun run electron:dev, or close other heavy apps.";
+    }
+    return { success: false, error: msg };
+  } catch (err) {
+    return { success: false, error: String(err) };
+  }
+}
+
+function mainProcessEsbuildArgs(defines: Record<string, string>, watch: boolean): string[] {
+  const args = [
+    "src/main/index.ts",
+    "--bundle",
+    "--platform=node",
+    "--format=cjs",
+    "--outfile=dist/main.cjs",
+    "--external:electron",
+    `--alias:node-fetch=${MAIN_PROCESS_ALIAS["node-fetch"]}`,
+    `--alias:abort-controller=${MAIN_PROCESS_ALIAS["abort-controller"]}`,
+    "--log-level=warning",
+  ];
+  for (const [k, v] of Object.entries(defines)) {
+    args.push(`--define:${k}=${v}`);
+  }
+  if (watch) args.push("--watch");
+  return args;
+}
+
+function preloadEsbuildArgs(entry: "bootstrap" | "browser-toolbar", watch: boolean): string[] {
+  const rel = entry === "bootstrap" ? "src/preload/bootstrap.ts" : "src/preload/browser-toolbar.ts";
+  const out =
+    entry === "bootstrap" ? "dist/bootstrap-preload.cjs" : "dist/browser-toolbar-preload.cjs";
+  const args = [
+    rel,
+    "--bundle",
+    "--platform=node",
+    "--format=cjs",
+    `--outfile=${out}`,
+    "--external:electron",
+    "--log-level=warning",
+  ];
+  if (watch) args.push("--watch");
+  return args;
+}
+
+/** Session MCP only (small). Pi agent is built later so its huge `bun build` does not run right before the main bundle. */
+async function ensureSessionMcpBuilt(): Promise<void> {
+  console.log("🌉 Building Session MCP server...");
+  const sessionDistDir = join(SESSION_SERVER_DIR, "dist");
+  if (!existsSync(sessionDistDir)) mkdirSync(sessionDistDir, { recursive: true });
+
+  const sessionResult = await buildSessionMcpServer();
+  if (!sessionResult.success) {
+    console.error("❌ Session MCP server build failed:", sessionResult.error);
+    process.exit(1);
+  }
+  console.log("✅ Session MCP server built");
+}
+
+async function ensurePiAgentBuilt(): Promise<void> {
+  const piDistDir = join(PI_AGENT_SERVER_DIR, "dist");
+  if (!existsSync(piDistDir)) mkdirSync(piDistDir, { recursive: true });
+
+  if (!existsSync(join(PI_AGENT_SERVER_DIR, "src"))) {
+    console.log("⏭️  Pi agent server skipped (package not found)");
+    return;
+  }
+
+  console.log("🥧 Building Pi agent server...");
+  const piResult = await buildPiAgentServer();
+  if (!piResult.success) {
+    console.error("❌ Pi agent server build failed:", piResult.error);
+    process.exit(1);
+  }
+  console.log("✅ Pi agent server built");
 }
 
 // Get environment variables for electron process
@@ -289,32 +359,6 @@ function getElectronEnv(): Record<string, string> {
     CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
     CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
   };
-}
-
-// Run a one-shot esbuild using the JavaScript API
-async function runEsbuild(
-  entryPoint: string,
-  outfile: string,
-  defines: Record<string, string> = {},
-  options: { packagesExternal?: boolean; alias?: Record<string, string> } = {}
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await esbuild.build({
-      entryPoints: [join(ROOT_DIR, entryPoint)],
-      bundle: true,
-      platform: "node",
-      format: "cjs",
-      outfile: join(ROOT_DIR, outfile),
-      external: ["electron"],
-      ...(options.packagesExternal ? { packages: "external" as const } : {}),
-      ...(options.alias ? { alias: options.alias } : {}),
-      define: defines,
-      logLevel: "warning",
-    });
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: String(err) };
-  }
 }
 
 // Build Pi agent server using bun instead of esbuild.
@@ -419,14 +463,11 @@ async function main(): Promise<void> {
 
   copyResources();
 
-  // Build MCP servers for Codex sessions
-  await buildMcpServers();
-
-  // Build WhatsApp worker bundle so the adapter can spawn it on demand
-  await buildWaWorker();
+  // Session MCP first (small). Pi agent is deferred until after main/preload so a ~20MB+ Pi
+  // `bun build` does not exhaust RAM immediately before bundling the Electron main graph.
+  await ensureSessionMcpBuilt();
 
   const vitePort = process.env.CRAFT_VITE_PORT || "5173";
-  const oauthDefines = getOAuthDefines();
 
   // Kill any existing process on the Vite port
   await killProcessOnPort(vitePort);
@@ -434,7 +475,8 @@ async function main(): Promise<void> {
   // =========================================================
   // PHASE 1: Initial build (one-shot, wait for completion)
   // =========================================================
-  console.log("🔨 Building main process...");
+  const mainDefines = getMainProcessEsbuildDefines();
+  console.log("🔨 Building main process (esbuild)…");
 
   const mainCjsPath = join(DIST_DIR, "main.cjs");
   const preloadCjsPath = join(DIST_DIR, "bootstrap-preload.cjs");
@@ -445,38 +487,25 @@ async function main(): Promise<void> {
   if (existsSync(preloadCjsPath)) rmSync(preloadCjsPath);
   if (existsSync(toolbarPreloadCjsPath)) rmSync(toolbarPreloadCjsPath);
 
-  // Build main and preload entries in parallel
-  const [mainResult, preloadResult, toolbarPreloadResult] = await Promise.all([
-    runEsbuild(
-      "apps/electron/src/main/index.ts",
-      "apps/electron/dist/main.cjs",
-      oauthDefines,
-      { alias: MAIN_PROCESS_ALIAS }
-    ),
-    runEsbuild(
-      "apps/electron/src/preload/bootstrap.ts",
-      "apps/electron/dist/bootstrap-preload.cjs"
-    ),
-    runEsbuild(
-      "apps/electron/src/preload/browser-toolbar.ts",
-      "apps/electron/dist/browser-toolbar-preload.cjs"
-    ),
-  ]);
-
+  const mainResult = await runEsbuildCli(ELECTRON_DIR, mainProcessEsbuildArgs(mainDefines, false));
   if (!mainResult.success) {
     console.error("❌ Main process build failed:", mainResult.error);
     process.exit(1);
   }
 
+  const preloadResult = await runEsbuildCli(ELECTRON_DIR, preloadEsbuildArgs("bootstrap", false));
   if (!preloadResult.success) {
     console.error("❌ Preload build failed:", preloadResult.error);
     process.exit(1);
   }
 
+  const toolbarPreloadResult = await runEsbuildCli(ELECTRON_DIR, preloadEsbuildArgs("browser-toolbar", false));
   if (!toolbarPreloadResult.success) {
     console.error("❌ Browser toolbar preload build failed:", toolbarPreloadResult.error);
     process.exit(1);
   }
+
+  await ensurePiAgentBuilt();
 
   // Wait for files to stabilize (filesystem flush)
   console.log("⏳ Waiting for build files to stabilize...");
@@ -522,7 +551,7 @@ async function main(): Promise<void> {
   console.log("📡 Starting dev servers...\n");
 
   const processes: Subprocess[] = [];
-  const esbuildContexts: esbuild.BuildContext[] = [];
+  const esbuildBin = resolveEsbuildBin();
 
   // 1. Vite dev server (strictPort ensures we don't silently switch ports)
   const viteProc = spawn({
@@ -535,49 +564,39 @@ async function main(): Promise<void> {
   });
   processes.push(viteProc);
 
-  // 2. Main process watcher (using esbuild watch API)
-  const mainContext = await esbuild.context({
-    entryPoints: [join(ROOT_DIR, "apps/electron/src/main/index.ts")],
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    outfile: join(ROOT_DIR, "apps/electron/dist/main.cjs"),
-    external: ["electron"],
-    alias: MAIN_PROCESS_ALIAS,
-    define: oauthDefines,
-    logLevel: "info",
+  // 2–4. esbuild --watch (GOMAXPROCS capped via childEnvWithGoMax)
+  const mainWatch = spawn({
+    cmd: [esbuildBin, ...mainProcessEsbuildArgs(mainDefines, true)],
+    cwd: ELECTRON_DIR,
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
+    env: childEnvWithGoMax(process.env.CRAFT_ESBUILD_GOMAXPROCS?.trim() || "2"),
   });
-  await mainContext.watch();
-  esbuildContexts.push(mainContext);
-  console.log("👀 Watching main process...");
+  processes.push(mainWatch);
+  console.log("👀 Watching main process (esbuild --watch)…");
 
-  // 3. Preload watcher (using esbuild watch API)
-  const preloadContext = await esbuild.context({
-    entryPoints: [join(ROOT_DIR, "apps/electron/src/preload/bootstrap.ts")],
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    outfile: join(ROOT_DIR, "apps/electron/dist/bootstrap-preload.cjs"),
-    external: ["electron"],
-    logLevel: "info",
+  const preloadWatch = spawn({
+    cmd: [esbuildBin, ...preloadEsbuildArgs("bootstrap", true)],
+    cwd: ELECTRON_DIR,
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
+    env: childEnvWithGoMax(process.env.CRAFT_ESBUILD_GOMAXPROCS?.trim() || "2"),
   });
-  await preloadContext.watch();
-  esbuildContexts.push(preloadContext);
-  console.log("👀 Watching preload...");
+  processes.push(preloadWatch);
+  console.log("👀 Watching preload (esbuild --watch)…");
 
-  // 4. Browser toolbar preload watcher (dedicated browser window bridge)
-  const toolbarPreloadContext = await esbuild.context({
-    entryPoints: [join(ROOT_DIR, "apps/electron/src/preload/browser-toolbar.ts")],
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    outfile: join(ROOT_DIR, "apps/electron/dist/browser-toolbar-preload.cjs"),
-    external: ["electron"],
-    logLevel: "info",
+  const toolbarPreloadWatch = spawn({
+    cmd: [esbuildBin, ...preloadEsbuildArgs("browser-toolbar", true)],
+    cwd: ELECTRON_DIR,
+    stdin: "ignore",
+    stdout: "inherit",
+    stderr: "inherit",
+    env: childEnvWithGoMax(process.env.CRAFT_ESBUILD_GOMAXPROCS?.trim() || "2"),
   });
-  await toolbarPreloadContext.watch();
-  esbuildContexts.push(toolbarPreloadContext);
-  console.log("👀 Watching browser toolbar preload...");
+  processes.push(toolbarPreloadWatch);
+  console.log("👀 Watching browser toolbar preload (esbuild --watch)…");
 
   // 5. Start Electron (build already verified)
   console.log("🚀 Starting Electron...\n");
@@ -595,15 +614,7 @@ async function main(): Promise<void> {
   // Handle cleanup on exit
   const cleanup = async () => {
     console.log("\n🛑 Shutting down...");
-    // Dispose esbuild contexts
-    for (const ctx of esbuildContexts) {
-      try {
-        await ctx.dispose();
-      } catch {
-        // Context may already be disposed
-      }
-    }
-    // Kill subprocesses
+    // Kill subprocesses (Vite, esbuild --watch children, Electron)
     for (const proc of processes) {
       try {
         proc.kill();

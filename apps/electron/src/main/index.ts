@@ -95,6 +95,8 @@ import { initializeBackendHostRuntime } from '@craft-agent/shared/agent/backend'
 import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
 import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
+import { registerPolyIpcHandlers } from './poly/register-poly-ipc'
+import { startPolyBackendInMain, disposePolyBackend } from './poly/poly-backend'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
@@ -456,6 +458,8 @@ app.whenReady().then(async () => {
     browserPaneManager.setWindowManager(windowManager)
     browserPaneManager.registerToolbarIpc()
 
+    registerPolyIpcHandlers()
+
     // Build real PlatformServices from Electron APIs
     const platform: PlatformServices = createElectronPlatform({
       app,
@@ -529,6 +533,8 @@ app.whenReady().then(async () => {
     })
 
     if (!isClientOnly) {
+      await startPolyBackendInMain(isClientOnly)
+
       // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
       if (process.platform === 'win32') {
         const { getGitBashPath, clearGitBashPath } = await import('@craft-agent/shared/config')
@@ -651,17 +657,6 @@ app.whenReady().then(async () => {
             // Route messaging diagnostics through the dedicated messaging log
             // at ~/.craft-agent/logs/messaging-gateway.log.
             logger: messagingGatewayLog,
-            // WhatsApp worker runs under Electron's embedded Node via
-            // ELECTRON_RUN_AS_NODE (WhatsAppAdapter defaults nodeBin to
-            // process.execPath). In dev we resolve worker.cjs from the
-            // monorepo; in packaged builds it's shipped via extraResources
-            // (see apps/electron/electron-builder.yml).
-            whatsapp: {
-              workerEntry: app.isPackaged
-                ? join(process.resourcesPath, 'messaging-whatsapp-worker', 'worker.cjs')
-                : join(process.cwd(), 'packages', 'messaging-whatsapp-worker', 'dist', 'worker.cjs'),
-              pairingMode: 'qr',
-            },
           })
           return {
             sessionManager: sm,
@@ -1103,6 +1098,12 @@ app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
   if (isQuitting) return
   isQuitting = true
+
+  try {
+    await disposePolyBackend()
+  } catch (err) {
+    mainLog.error('[poly] dispose failed', err)
+  }
 
   // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
   windowManager?.setAppQuitting(true)

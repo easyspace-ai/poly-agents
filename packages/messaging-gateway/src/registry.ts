@@ -28,7 +28,6 @@ import { MessagingGateway } from './gateway'
 import { ConfigStore } from './config-store'
 import { PairingCodeManager } from './pairing'
 import { TelegramAdapter } from './adapters/telegram/index'
-import { WhatsAppAdapter, type WhatsAppEvent } from './adapters/whatsapp/index'
 import { LarkAdapter, parseLarkCredentials, type LarkCredentials } from './adapters/lark/index'
 import { TopicRegistry } from './topic-registry'
 import type { SessionEvent } from './renderer'
@@ -68,9 +67,9 @@ export interface MessagingGatewayRegistryOptions {
   getLegacyMessagingDir?: (workspaceId: string) => string | undefined
   /** Broadcasts an RPC push event to UI clients. No-op if undefined. */
   publishEvent?: (channel: string, target: PushTarget, ...args: unknown[]) => void
-  /** Optional WhatsApp worker config — required to enable the WhatsApp adapter. */
+  /** Optional legacy WhatsApp worker config — omitted in builds without a WhatsApp adapter. */
   whatsapp?: {
-    /** Absolute path to the worker entry (packaged/unpacked from @craft-agent/messaging-whatsapp-worker). */
+    /** Absolute path to the worker entry (Node subprocess). */
     workerEntry: string
     /** Node binary override (defaults to process.execPath with ELECTRON_RUN_AS_NODE). */
     nodeBin?: string
@@ -86,8 +85,6 @@ interface WorkspaceState {
   configStore: ConfigStore
   topicRegistry: TopicRegistry
   botUsernames: Partial<Record<PlatformType, string>>
-  whatsapp: WhatsAppAdapter | null
-  whatsappOffEvent?: () => void
   runtime: Record<PlatformType, MessagingPlatformRuntimeInfo>
 }
 
@@ -168,34 +165,12 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     }
 
     if (isPlatformConfigured(config, 'whatsapp')) {
-      if (this.hasWhatsAppAuthState(workspaceId)) {
-        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-          configured: true,
-          connected: false,
-          state: 'connecting',
-          lastError: undefined,
-        })
-        void this.startWhatsAppAdapter(workspaceId, state, { persistConfig: false, reason: 'restore' }).catch((err) => {
-          this.log.error('background WhatsApp restore failed', {
-            event: 'whatsapp_restore_failed',
-            workspaceId,
-            error: err,
-          })
-          this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-            configured: true,
-            connected: false,
-            state: 'error',
-            lastError: err instanceof Error ? err.message : String(err),
-          })
-        })
-      } else {
-        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-          configured: true,
-          connected: false,
-          state: 'reconnect_required',
-          lastError: 'WhatsApp needs to be linked again.',
-        })
-      }
+      this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
+        configured: true,
+        connected: false,
+        state: 'error',
+        lastError: 'WhatsApp is not supported in this build.',
+      })
     }
   }
 
@@ -250,9 +225,6 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       await state.gateway.unregisterAdapter('telegram').catch(() => {})
       await state.gateway.unregisterAdapter('whatsapp').catch(() => {})
       await state.gateway.unregisterAdapter('lark').catch(() => {})
-      state.whatsappOffEvent?.()
-      state.whatsappOffEvent = undefined
-      state.whatsapp = null
       this.setPlatformRuntime(workspaceId, state, 'telegram', {
         configured: false,
         connected: false,
@@ -281,11 +253,6 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       const configured = isPlatformConfigured(cfg, platform)
       if (!configured && state.gateway.getAdapter(platform)) {
         await state.gateway.unregisterAdapter(platform).catch(() => {})
-      }
-      if (!configured && platform === 'whatsapp') {
-        state.whatsappOffEvent?.()
-        state.whatsappOffEvent = undefined
-        state.whatsapp = null
       }
       if (!configured) {
         this.setPlatformRuntime(workspaceId, state, platform, {
@@ -713,15 +680,6 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     const state = this.workspaces.get(workspaceId)
     if (!state) return
 
-    if (platform === 'whatsapp') {
-      state.whatsappOffEvent?.()
-      state.whatsappOffEvent = undefined
-      if (state.whatsapp) {
-        await state.whatsapp.destroy().catch(() => {})
-        state.whatsapp = null
-      }
-    }
-
     await state.gateway.unregisterAdapter(platform).catch(() => {})
     state.botUsernames[platform] = undefined
     this.pairing.clearWorkspace(workspaceId)
@@ -782,148 +740,15 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
   }
 
   // -------------------------------------------------------------------------
-  // WhatsApp — subprocess lifecycle
+  // WhatsApp — removed (no Baileys worker in this build)
   // -------------------------------------------------------------------------
 
-  async startWhatsAppConnect(workspaceId: string): Promise<void> {
-    const waConfig = this.opts.whatsapp
-    if (!waConfig) {
-      throw new Error('WhatsApp support is not configured on this server')
-    }
-    const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
-    this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-      configured: true,
-      connected: false,
-      state: 'connecting',
-      lastError: undefined,
-    })
-    await this.startWhatsAppAdapter(workspaceId, state, { persistConfig: true, reason: 'user_connect' })
+  async startWhatsAppConnect(_workspaceId: string): Promise<void> {
+    throw new Error('WhatsApp is not supported in this build')
   }
 
-  async submitWhatsAppPhone(workspaceId: string, phoneNumber: string): Promise<void> {
-    const state = this.workspaces.get(workspaceId)
-    if (!state?.whatsapp) {
-      throw new Error('WhatsApp not started — call startWhatsAppConnect first')
-    }
-    const cleaned = phoneNumber.replace(/[^\d]/g, '')
-    if (cleaned.length < 8) throw new Error('Phone number looks too short')
-    await state.whatsapp.requestPairingCode(cleaned)
-  }
-
-  private async startWhatsAppAdapter(
-    workspaceId: string,
-    state: WorkspaceState,
-    options: { persistConfig: boolean; reason: 'restore' | 'user_connect' },
-  ): Promise<void> {
-    const waConfig = this.opts.whatsapp
-    if (!waConfig) {
-      throw new Error('WhatsApp support is not configured on this server')
-    }
-
-    state.whatsappOffEvent?.()
-    state.whatsappOffEvent = undefined
-    if (state.whatsapp) {
-      await state.whatsapp.destroy().catch(() => {})
-      state.whatsapp = null
-    }
-
-    const adapter = new WhatsAppAdapter()
-    state.whatsapp = adapter
-    state.whatsappOffEvent = adapter.onEvent((ev) => this.onWhatsAppEvent(workspaceId, ev))
-
-    // selfChatMode: default ON. Persisted to workspace config so it
-    // survives restart and can be toggled later if the user wants pure
-    // contact-only routing.
-    const persistedCfg = state.configStore.get()
-    const selfChatMode = persistedCfg.platforms.whatsapp?.selfChatMode ?? true
-
-    await adapter.initialize({
-      workerEntry: waConfig.workerEntry,
-      nodeBin: waConfig.nodeBin,
-      authStateDir: this.getWhatsAppAuthStateDir(workspaceId),
-      pairingMode: waConfig.pairingMode ?? 'code',
-      selfChatMode,
-      logger: this.log.child({
-        component: 'whatsapp-adapter',
-        workspaceId,
-        platform: 'whatsapp',
-      }),
-    })
-
-    state.gateway.registerAdapter(adapter)
-    if (options.persistConfig) {
-      state.configStore.update({
-        enabled: true,
-        platforms: { whatsapp: { enabled: true, selfChatMode } },
-      })
-    }
-    await state.gateway.start()
-    this.log.info('WhatsApp adapter started', {
-      event: 'whatsapp_adapter_started',
-      workspaceId,
-      reason: options.reason,
-    })
-  }
-
-  private onWhatsAppEvent(workspaceId: string, event: WhatsAppEvent): void {
-    const state = this.workspaces.get(workspaceId)
-    if (!state) return
-
-    this.opts.publishEvent?.(
-      RPC_CHANNELS.messaging.WA_UI_EVENT,
-      { to: 'workspace', workspaceId },
-      { workspaceId, event },
-    )
-
-    switch (event.type) {
-      case 'qr':
-        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-          configured: true,
-          connected: false,
-          state: 'reconnect_required',
-          lastError: 'QR scan required',
-        })
-        return
-      case 'connected':
-        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-          configured: true,
-          connected: true,
-          state: 'connected',
-          identity: event.name ?? event.jid,
-          lastError: undefined,
-        })
-        return
-      case 'disconnected':
-        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-          configured: true,
-          connected: false,
-          state: event.loggedOut ? 'reconnect_required' : 'disconnected',
-          lastError: event.reason,
-          identity: undefined,
-        })
-        return
-      case 'unavailable':
-        this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-          configured: true,
-          connected: false,
-          state: 'error',
-          lastError: event.message,
-          identity: undefined,
-        })
-        return
-      case 'error':
-        if (!state.runtime.whatsapp.connected) {
-          this.setPlatformRuntime(workspaceId, state, 'whatsapp', {
-            configured: true,
-            connected: false,
-            state: 'error',
-            lastError: event.message,
-          })
-        }
-        return
-      case 'pairing_code':
-        return
-    }
+  async submitWhatsAppPhone(_workspaceId: string, _phoneNumber: string): Promise<void> {
+    throw new Error('WhatsApp is not supported in this build')
   }
 
   // -------------------------------------------------------------------------
@@ -1010,7 +835,6 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       configStore,
       topicRegistry,
       botUsernames: {},
-      whatsapp: null,
       runtime: {
         telegram: createRuntime('telegram', isPlatformConfigured(cfg, 'telegram')),
         whatsapp: createRuntime('whatsapp', isPlatformConfigured(cfg, 'whatsapp')),
@@ -1493,16 +1317,6 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
       platform,
       cloneRuntime(status),
     )
-  }
-
-  private hasWhatsAppAuthState(workspaceId: string): boolean {
-    const dir = this.getWhatsAppAuthStateDir(workspaceId)
-    if (!existsSync(dir)) return false
-    try {
-      return readdirSync(dir).some((entry) => !entry.startsWith('.'))
-    } catch {
-      return false
-    }
   }
 
   private getWhatsAppAuthStateDir(workspaceId: string): string {

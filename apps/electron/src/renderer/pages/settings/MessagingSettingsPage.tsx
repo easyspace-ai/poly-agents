@@ -1,7 +1,7 @@
 /**
  * MessagingSettingsPage
  *
- * Configure messaging platform connections (Telegram, WhatsApp, Lark) and
+ * Configure messaging platform connections (Telegram, Lark) and
  * view active session bindings.
  *
  * Layout:
@@ -12,7 +12,7 @@
  *    row, then a separator, then a collapsible Supergroup section that
  *    expands to show topic-bound bindings. Mirrors the chevron pattern
  *    used by AiSettingsPage's `WorkspaceOverrideCard`.
- *  - WhatsApp / Lark: bindings render as a flat list under their bot row.
+ *  - Lark: bindings render as a flat list under their bot row.
  */
 
 import * as React from 'react'
@@ -52,7 +52,6 @@ import { MessagingPlatformIcon } from '@/components/messaging/MessagingPlatformI
 import { TelegramConnectDialog } from '@/components/messaging/TelegramConnectDialog'
 import { LarkConnectDialog } from '@/components/messaging/LarkConnectDialog'
 import { TelegramSupergroupPairingDialog } from '@/components/messaging/TelegramSupergroupPairingDialog'
-import { WhatsAppConnectDialog } from '@/components/messaging/WhatsAppConnectDialog'
 import {
   BindingAllowListPopover,
   TelegramAccessSection,
@@ -119,9 +118,6 @@ export default function MessagingSettingsPage() {
               <PlatformRow platform="telegram" workspaceId={activeWorkspace.id} />
             </SettingsCard>
             <SettingsCard>
-              <PlatformRow platform="whatsapp" workspaceId={activeWorkspace.id} />
-            </SettingsCard>
-            <SettingsCard>
               <PlatformRow platform="lark" workspaceId={activeWorkspace.id} />
             </SettingsCard>
           </SettingsSection>
@@ -135,11 +131,10 @@ export default function MessagingSettingsPage() {
 // Platform row
 // ---------------------------------------------------------------------------
 
-type Platform = 'telegram' | 'whatsapp' | 'lark'
+type Platform = 'telegram' | 'lark'
 
 const PLATFORM_LABEL_KEYS: Record<Platform, string> = {
   telegram: 'settings.messaging.telegram.title',
-  whatsapp: 'settings.messaging.whatsapp.title',
   lark: 'settings.messaging.lark.title',
 }
 
@@ -466,9 +461,6 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
             onPaired={refreshSupergroup}
           />
         </>
-      )}
-      {platform === 'whatsapp' && (
-        <WhatsAppConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
       )}
       {platform === 'lark' && (
         <LarkConnectDialog open={connectOpen} onOpenChange={setConnectOpen} reconfigure={reconfigure} />
@@ -810,7 +802,7 @@ function FlatBindingRow({
   onOpen: () => void
   onUnbind: () => void
 }) {
-  // Used by WhatsApp + Lark (no supergroup/topic concept) — same compact
+  // Used by Lark (no supergroup/topic concept) — same compact
   // row the page used to render for every platform before the Telegram split.
   const meta = sessionMetaMap.get(binding.sessionId)
   const sessionLabel = meta ? getSessionTitle(meta) : binding.channelName || binding.channelId
@@ -852,16 +844,13 @@ function buildDescription(
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string {
   if (runtime.connected) {
-    if (platform === 'whatsapp' && runtime.identity) {
-      return t('dialog.whatsapp.connectedAs', { name: runtime.identity })
-    }
     if (platform === 'telegram' && runtime.identity) {
       return t('settings.messaging.telegram.validBot', { username: runtime.identity })
     }
     return t(`settings.messaging.${platform}.connected`, { defaultValue: 'Connected' })
   }
   if (runtime.state === 'connecting') {
-    return t('dialog.whatsapp.starting', { defaultValue: 'Connecting…' })
+    return t('common.connecting')
   }
   if (runtime.state === 'error' && runtime.lastError) {
     return runtime.lastError

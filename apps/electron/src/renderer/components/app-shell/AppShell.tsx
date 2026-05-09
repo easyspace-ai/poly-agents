@@ -145,6 +145,10 @@ import { hasOpenOverlay } from "@/lib/overlay-detection"
 import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { SpmaNavigatorPanel } from "@/components/spma/SpmaNavigatorPanel"
+import { SpmaPolyAccountsNavigator } from "@/components/spma/SpmaPolyAccountsNavigator"
+import { SpmaPolyMarketsNavigator } from "@/components/spma/SpmaPolyMarketsNavigator"
+import { SpmaPolyRiskNavigator } from "@/components/spma/SpmaPolyRiskNavigator"
+import { SpmaPolyHistoryNavigator } from "@/components/spma/SpmaPolyHistoryNavigator"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -2971,7 +2975,23 @@ function AppShellContent({
                 onSelectSubpage={(subpage) => handleSettingsClick(subpage)}
               />
             )}
-            {isPolyNavigation(navState) && (
+            {isPolyNavigation(navState) && navState.tab === "accounts" && (
+              <SpmaPolyAccountsNavigator selectedAccountId={navState.accountId ?? null} />
+            )}
+            {isPolyNavigation(navState) && navState.tab === "markets" && (
+              <SpmaPolyMarketsNavigator selectedMarketId={navState.marketId ?? null} />
+            )}
+            {isPolyNavigation(navState) && navState.tab === "risk" && (
+              <SpmaPolyRiskNavigator selectedPositionId={navState.riskPositionId ?? null} />
+            )}
+            {isPolyNavigation(navState) && navState.tab === "history" && (
+              <SpmaPolyHistoryNavigator selectedTradeId={navState.historyTradeId ?? null} />
+            )}
+            {isPolyNavigation(navState) &&
+              navState.tab !== "accounts" &&
+              navState.tab !== "markets" &&
+              navState.tab !== "risk" &&
+              navState.tab !== "history" && (
               <SpmaNavigatorPanel tab={navState.tab} />
             )}
             {isSessionsNavigation(navState) && (
@@ -3327,7 +3347,7 @@ function AppShellContent({
         onTransferComplete={handleTransferComplete}
       />
 
-      {/* Messaging dialogs (pairing-code + WA connect) — driven by messagingDialogAtom.
+      {/* Messaging dialogs (pairing-code) — driven by messagingDialogAtom.
           Mounted here so they survive context-menu / dropdown close. */}
       <MessagingDialogHost />
 

@@ -183,8 +183,25 @@ export const routes = {
         ? `settings/${subpage}` as const
         : 'settings' as const,
 
-    /** SPMA dashboard (markets, risk, history, accounts, setup) */
-    poly: (tab: 'markets' | 'risk' | 'history' | 'accounts' | 'setup') => `poly/${tab}` as const,
+    /**
+     * SPMA dashboard (markets, risk, history, accounts, setup).
+     * Pass `detailId` for list tabs to open that row in the main detail column.
+     */
+    poly: (tab: 'markets' | 'risk' | 'history' | 'accounts' | 'setup', detailId?: string | null) => {
+      if (tab === 'accounts' && detailId) {
+        return `poly/accounts/${encodeURIComponent(detailId)}` as const
+      }
+      if (tab === 'markets' && detailId) {
+        return `poly/markets/${encodeURIComponent(detailId)}` as const
+      }
+      if (tab === 'risk' && detailId) {
+        return `poly/risk/${encodeURIComponent(detailId)}` as const
+      }
+      if (tab === 'history' && detailId) {
+        return `poly/history/${encodeURIComponent(detailId)}` as const
+      }
+      return `poly/${tab}` as const
+    },
   },
 } as const
 

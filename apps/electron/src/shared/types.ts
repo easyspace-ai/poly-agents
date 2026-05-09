@@ -24,6 +24,7 @@ import type {
 
 // Mode types from dedicated subpath export (avoids pulling in SDK)
 import type { PermissionMode } from '@craft-agent/shared/agent/modes';
+import type { PolyHttpRequestSpec, PolyHttpResponseEnvelope } from '@craft-agent/shared/poly-ipc';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
@@ -700,12 +701,7 @@ export interface ElectronAPI {
    * Poly / SPMA: proxy to the loopback bot HTTP API (main process only — never exposed to the network).
    * `path` must start with `/api/`.
    */
-  polyHttpRequest(spec: {
-    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-    path: string
-    body?: unknown
-    headers?: Record<string, string>
-  }): Promise<{ ok: boolean; status: number; json?: unknown; text?: string }>
+  polyHttpRequest(spec: PolyHttpRequestSpec): Promise<PolyHttpResponseEnvelope>
   polyIsReady(): Promise<boolean>
 }
 
@@ -867,6 +863,14 @@ export function isValidPolyTab(value: string): value is PolyTab {
 export interface PolyNavigationState {
   navigator: 'poly'
   tab: PolyTab
+  /** Selected Polymarket account id when `tab === 'accounts'` (detail column). */
+  accountId?: string | null
+  /** Selected market id when `tab === 'markets'` (detail column). */
+  marketId?: string | null
+  /** Selected risk position id when `tab === 'risk'` (detail column). */
+  riskPositionId?: string | null
+  /** Selected trade id when `tab === 'history'` (detail column). */
+  historyTradeId?: string | null
   rightSidebar?: RightSidebarPanel
 }
 
@@ -912,6 +916,18 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
 
 export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'poly') {
+    if (state.tab === 'accounts' && state.accountId) {
+      return `poly:${state.tab}:${state.accountId}`
+    }
+    if (state.tab === 'markets' && state.marketId) {
+      return `poly:${state.tab}:${state.marketId}`
+    }
+    if (state.tab === 'risk' && state.riskPositionId) {
+      return `poly:${state.tab}:${state.riskPositionId}`
+    }
+    if (state.tab === 'history' && state.historyTradeId) {
+      return `poly:${state.tab}:${state.historyTradeId}`
+    }
     return `poly:${state.tab}`
   }
   if (state.navigator === 'sources') {
@@ -950,10 +966,31 @@ export const getNavigationStateKey = (state: NavigationState): string => {
 
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
   if (key.startsWith('poly:')) {
-    const tab = key.slice(5)
-    if (isValidPolyTab(tab)) {
-      return { navigator: 'poly', tab }
+    const rest = key.slice(5)
+    const colon = rest.indexOf(':')
+    if (colon === -1) {
+      const tab = rest
+      if (isValidPolyTab(tab)) {
+        return { navigator: 'poly', tab }
+      }
+      return null
     }
+    const tab = rest.slice(0, colon)
+    const detailId = rest.slice(colon + 1)
+    if (!isValidPolyTab(tab)) return null
+    if (tab === 'accounts' && detailId) {
+      return { navigator: 'poly', tab: 'accounts', accountId: detailId }
+    }
+    if (tab === 'markets' && detailId) {
+      return { navigator: 'poly', tab: 'markets', marketId: detailId }
+    }
+    if (tab === 'risk' && detailId) {
+      return { navigator: 'poly', tab: 'risk', riskPositionId: detailId }
+    }
+    if (tab === 'history' && detailId) {
+      return { navigator: 'poly', tab: 'history', historyTradeId: detailId }
+    }
+    return { navigator: 'poly', tab }
   }
 
   // Handle sources

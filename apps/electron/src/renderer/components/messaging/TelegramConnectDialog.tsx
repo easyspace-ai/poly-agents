@@ -1,7 +1,7 @@
 /**
  * TelegramConnectDialog — token-input pairing flow in a modal.
  *
- * Sibling to WhatsAppConnectDialog: same Dialog shape, different auth flow
+ * Same Dialog shell as other messaging connect flows, different auth flow
  * (Telegram Bot API doesn't support QR login — only bot tokens issued by
  * @BotFather). User pastes a token → Test → Save → dialog closes.
  *

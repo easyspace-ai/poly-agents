@@ -35,6 +35,7 @@ import {
 import type { ConfirmDialogSpec, FileDialogSpec } from '@craft-agent/server-core/transport'
 import type { RpcClient } from '@craft-agent/server-core/transport'
 import type { RemoteServerConfig } from '@craft-agent/core/types'
+import { POLY_IPC_CHANNELS } from '@craft-agent/shared/poly-ipc'
 import type { ElectronAPI } from '../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -434,5 +435,8 @@ client.onConnectionStateChanged((state) => {
     return null
   }
 }
+
+;(api as ElectronAPI).polyHttpRequest = (spec) => ipcRenderer.invoke(POLY_IPC_CHANNELS.HTTP_REQUEST, spec)
+;(api as ElectronAPI).polyIsReady = () => ipcRenderer.invoke(POLY_IPC_CHANNELS.IS_READY)
 
 contextBridge.exposeInMainWorld('electronAPI', api)

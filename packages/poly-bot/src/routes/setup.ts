@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../db';
 import { config } from '../config';
 import { readNeedsOnboarding } from '../onboarding';
-import { markOnboardingCompleteAndStartHeavy } from '../heavyServices';
+import { autoCompleteOnboardingIfTradingReady, markOnboardingCompleteAndStartHeavy } from '../heavyServices';
 import { createLogger } from '../logger';
 
 const log = createLogger('setup');
@@ -30,6 +30,7 @@ async function hasOutboundProxyInDb(): Promise<boolean> {
 
 router.get('/api/setup/status', async (_req: Request, res: Response) => {
   try {
+    await autoCompleteOnboardingIfTradingReady();
     const needsOnboarding = await readNeedsOnboarding();
     const proxyInDb = await hasOutboundProxyInDb();
     const poly = await hasPolymarketTradingConfigured();

@@ -3,7 +3,6 @@ import { AllowListPreview } from '../demos/messaging/AllowListPreview'
 import { MessagingSettingsPagePreview } from '../demos/messaging/MessagingSettingsPagePreview'
 import { MessagingTelegramReworkedPreview } from '../demos/messaging/MessagingTelegramReworkedPreview'
 import { PairingCodeDialogPreview } from '../demos/messaging/PairingCodeDialogPreview'
-import { WhatsAppConnectDialogPreview } from '../demos/messaging/WhatsAppConnectDialogPreview'
 import { MessagingSubmenuPreview } from '../demos/messaging/MessagingSubmenuPreview'
 
 export const messagingComponents: ComponentEntry[] = [
@@ -178,7 +177,7 @@ export const messagingComponents: ComponentEntry[] = [
     id: 'messaging-settings-page',
     name: 'Messaging Settings Page',
     category: 'Messaging',
-    description: 'Telegram + WhatsApp settings page with inline bindings',
+    description: 'Telegram + Lark settings page with inline bindings',
     component: MessagingSettingsPagePreview,
     layout: 'full',
     props: [
@@ -189,8 +188,8 @@ export const messagingComponents: ComponentEntry[] = [
         defaultValue: false,
       },
       {
-        name: 'whatsappConnected',
-        description: 'Whether the WhatsApp adapter is connected',
+        name: 'larkConnected',
+        description: 'Whether the Lark adapter is connected',
         control: { type: 'boolean' },
         defaultValue: false,
       },
@@ -211,19 +210,19 @@ export const messagingComponents: ComponentEntry[] = [
     variants: [
       {
         name: 'Both disconnected',
-        props: { telegramConnected: false, whatsappConnected: false, bindings: 'none' },
+        props: { telegramConnected: false, larkConnected: false, bindings: 'none' },
       },
       {
         name: 'Telegram only',
-        props: { telegramConnected: true, whatsappConnected: false, bindings: 'none' },
+        props: { telegramConnected: true, larkConnected: false, bindings: 'none' },
       },
       {
         name: 'Both connected, no bindings',
-        props: { telegramConnected: true, whatsappConnected: true, bindings: 'none' },
+        props: { telegramConnected: true, larkConnected: true, bindings: 'none' },
       },
       {
         name: 'Both connected, 3 bindings',
-        props: { telegramConnected: true, whatsappConnected: true, bindings: 'many' },
+        props: { telegramConnected: true, larkConnected: true, bindings: 'many' },
       },
     ],
   },
@@ -231,7 +230,7 @@ export const messagingComponents: ComponentEntry[] = [
     id: 'messaging-pairing-code-dialog',
     name: 'Pairing Code Dialog',
     category: 'Messaging',
-    description: '6-digit pairing code modal (Telegram + WhatsApp)',
+    description: '6-digit pairing code modal (Telegram + Lark)',
     component: PairingCodeDialogPreview,
     layout: 'centered',
     props: [
@@ -242,7 +241,7 @@ export const messagingComponents: ComponentEntry[] = [
           type: 'select',
           options: [
             { label: 'Telegram', value: 'telegram' },
-            { label: 'WhatsApp', value: 'whatsapp' },
+            { label: 'Lark', value: 'lark' },
           ],
         },
         defaultValue: 'telegram',
@@ -284,9 +283,9 @@ export const messagingComponents: ComponentEntry[] = [
         },
       },
       {
-        name: 'WhatsApp',
+        name: 'Lark',
         props: {
-          platform: 'whatsapp',
+          platform: 'lark',
           code: '482193',
           expiresInSeconds: 300,
           botUsername: '',
@@ -326,51 +325,10 @@ export const messagingComponents: ComponentEntry[] = [
     ],
   },
   {
-    id: 'messaging-whatsapp-connect-dialog',
-    name: 'WhatsApp Connect Dialog',
-    category: 'Messaging',
-    description: 'Baileys QR pairing modal with phase state machine',
-    component: WhatsAppConnectDialogPreview,
-    layout: 'centered',
-    props: [
-      {
-        name: 'phase',
-        description: 'Internal phase of the connect dialog',
-        control: {
-          type: 'select',
-          options: [
-            { label: 'Idle', value: 'idle' },
-            { label: 'Starting', value: 'starting' },
-            { label: 'Show QR', value: 'show_qr' },
-            { label: 'Connected', value: 'connected' },
-            { label: 'Error', value: 'error' },
-          ],
-        },
-        defaultValue: 'show_qr',
-      },
-      {
-        name: 'errorMessage',
-        description: 'Error text (only used when phase = "error")',
-        control: { type: 'string', placeholder: 'Pairing failed: ...' },
-        defaultValue: 'Pairing failed: connection timed out',
-      },
-    ],
-    variants: [
-      { name: 'Idle', props: { phase: 'idle', errorMessage: '' } },
-      { name: 'Starting', props: { phase: 'starting', errorMessage: '' } },
-      { name: 'Show QR', props: { phase: 'show_qr', errorMessage: '' } },
-      { name: 'Connected', props: { phase: 'connected', errorMessage: '' } },
-      {
-        name: 'Error',
-        props: { phase: 'error', errorMessage: 'Pairing failed: connection timed out' },
-      },
-    ],
-  },
-  {
     id: 'messaging-submenu',
     name: 'Messaging Submenu',
     category: 'Messaging',
-    description: 'Session menu → Connect Messaging submenu (Telegram / WhatsApp)',
+    description: 'Session menu → Connect Messaging submenu (Telegram / Lark)',
     component: MessagingSubmenuPreview,
     layout: 'top',
     previewOverflow: 'visible',
@@ -382,8 +340,8 @@ export const messagingComponents: ComponentEntry[] = [
         defaultValue: true,
       },
       {
-        name: 'whatsappConnected',
-        description: 'Whether the WhatsApp adapter is connected (changes flow)',
+        name: 'larkConnected',
+        description: 'Whether the Lark adapter is connected (changes flow)',
         control: { type: 'boolean' },
         defaultValue: true,
       },
@@ -391,15 +349,15 @@ export const messagingComponents: ComponentEntry[] = [
     variants: [
       {
         name: 'Both connected',
-        props: { telegramConnected: true, whatsappConnected: true },
+        props: { telegramConnected: true, larkConnected: true },
       },
       {
         name: 'Nothing connected',
-        props: { telegramConnected: false, whatsappConnected: false },
+        props: { telegramConnected: false, larkConnected: false },
       },
       {
-        name: 'WhatsApp only',
-        props: { telegramConnected: false, whatsappConnected: true },
+        name: 'Lark only',
+        props: { telegramConnected: false, larkConnected: true },
       },
     ],
   },

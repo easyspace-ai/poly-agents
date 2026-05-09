@@ -33,15 +33,12 @@ export interface MessagingBootstrapOptions {
   /** Optional legacy dir (pre-relocation) for one-shot migration. Headless omits this. */
   getLegacyMessagingDir?: (workspaceId: string) => string | undefined
   logger?: MessagingLogger
-  whatsapp: {
-    /** Absolute path to the bundled worker.cjs. */
+  /**
+   * Optional WhatsApp worker config (removed from this product — callers should omit).
+   * @deprecated WhatsApp / Baileys worker is not shipped; registry rejects connect attempts.
+   */
+  whatsapp?: {
     workerEntry: string
-    /**
-     * Node binary to spawn. Required for hosts that don't run on Node themselves
-     * (i.e. Bun). Defaults to `process.execPath` inside WhatsAppAdapter — correct
-     * for Electron (which re-enters as Node via ELECTRON_RUN_AS_NODE) but wrong
-     * for Bun, so the Bun host must pass `'node'` or an explicit path.
-     */
     nodeBin?: string
     pairingMode?: 'qr' | 'code'
   }
@@ -72,11 +69,7 @@ export function createMessagingBootstrap(opts: MessagingBootstrapOptions): Messa
     getMessagingDir: opts.getMessagingDir,
     getLegacyMessagingDir: opts.getLegacyMessagingDir,
     logger: opts.logger,
-    whatsapp: {
-      workerEntry: opts.whatsapp.workerEntry,
-      nodeBin: opts.whatsapp.nodeBin,
-      pairingMode: opts.whatsapp.pairingMode ?? 'qr',
-    },
+    ...(opts.whatsapp ? { whatsapp: opts.whatsapp } : {}),
     publishEvent: (channel, target, ...args) => {
       publisher?.(channel, target, ...args)
     },
@@ -85,9 +78,7 @@ export function createMessagingBootstrap(opts: MessagingBootstrapOptions): Messa
   const log = opts.logger?.child({ component: 'bootstrap' })
   log?.info('messaging bootstrap created', {
     event: 'messaging_bootstrap_created',
-    workerEntry: opts.whatsapp.workerEntry,
-    nodeBin: opts.whatsapp.nodeBin ?? '(host default)',
-    pairingMode: opts.whatsapp.pairingMode ?? 'qr',
+    whatsappConfigured: Boolean(opts.whatsapp),
   })
 
   return {

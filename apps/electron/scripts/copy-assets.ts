@@ -31,3 +31,14 @@ try {
   // Only warn - PowerShell validation is optional on non-Windows platforms
   console.log('⚠ powershell-parser.ps1 copy skipped (not critical on non-Windows)');
 }
+
+// Poly / SPMA: Prisma schema + migrations for migrate deploy in packaged builds
+const polyPrismaSrc = join('..', '..', 'packages', 'poly-bot', 'prisma');
+const polyPrismaDest = join('dist', 'resources', 'poly-bot', 'prisma');
+try {
+  mkdirSync(join('dist', 'resources', 'poly-bot'), { recursive: true });
+  cpSync(polyPrismaSrc, polyPrismaDest, { recursive: true });
+  console.log('✓ Copied packages/poly-bot/prisma → dist/resources/poly-bot/prisma');
+} catch (err) {
+  console.log('⚠ poly-bot prisma copy skipped:', err);
+}

@@ -6,6 +6,7 @@
 import { spawn } from "bun";
 import { existsSync, readFileSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
+import { spawnWithOomRetry } from "./spawn-build-guard";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
@@ -17,9 +18,6 @@ const SESSION_SERVER_DIR = join(ROOT_DIR, "packages/session-mcp-server");
 const SESSION_SERVER_OUTPUT = join(SESSION_SERVER_DIR, "dist/index.js");
 const PI_AGENT_SERVER_DIR = join(ROOT_DIR, "packages/pi-agent-server");
 const PI_AGENT_SERVER_OUTPUT = join(PI_AGENT_SERVER_DIR, "dist/index.js");
-const WA_WORKER_DIR = join(ROOT_DIR, "packages/messaging-whatsapp-worker");
-const WA_WORKER_SOURCE = join(WA_WORKER_DIR, "src/worker.ts");
-const WA_WORKER_OUTPUT = join(WA_WORKER_DIR, "dist/worker.cjs");
 
 // Load .env file if it exists
 function loadEnvFile(): void {
@@ -61,7 +59,7 @@ function getBuildDefines(): string[] {
 
   return definedVars.map((varName) => {
     const value = process.env[varName] || "";
-    return `--define:process.env.${varName}="${value}"`;
+    return `--define:process.env.${varName}=${JSON.stringify(value)}`;
   });
 }
 
@@ -140,21 +138,18 @@ function verifySessionToolsCore(): void {
 async function buildInterceptor(): Promise<void> {
   console.log("🔌 Building unified network interceptor...");
 
-  const proc = spawn({
-    cmd: [
-      "bun", "run", "esbuild",
+  const exitCode = await spawnWithOomRetry(
+    [
+      "bun",
+      "build",
       INTERCEPTOR_SOURCE,
-      "--bundle",
-      "--platform=node",
+      "--target=node",
       "--format=cjs",
       `--outfile=${INTERCEPTOR_OUTPUT}`,
     ],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  const exitCode = await proc.exited;
+    ROOT_DIR,
+    { label: "Interceptor (bun build)" },
+  );
 
   if (exitCode !== 0) {
     console.error("❌ Interceptor build failed with exit code", exitCode);
@@ -257,59 +252,6 @@ async function buildPiAgentServer(): Promise<void> {
   console.log("✅ Pi agent server built successfully");
 }
 
-// Build the WhatsApp worker (Baileys-backed subprocess spawned by WhatsAppAdapter)
-async function buildWhatsAppWorker(): Promise<void> {
-  if (!existsSync(WA_WORKER_SOURCE)) {
-    console.log("⏭️  WhatsApp worker skipped (package not found)");
-    return;
-  }
-
-  console.log("📨 Building WhatsApp worker...");
-
-  const workerDistDir = join(WA_WORKER_DIR, "dist");
-  if (!existsSync(workerDistDir)) {
-    mkdirSync(workerDistDir, { recursive: true });
-  }
-
-  // Baileys is bundled INTO worker.cjs (not external) so the packaged app is
-  // self-contained. Dynamic `import('@whiskeysockets/baileys')` is resolved
-  // at bundle time because the specifier is a literal.
-  const proc = spawn({
-    cmd: [
-      "bun", "run", "esbuild",
-      WA_WORKER_SOURCE,
-      "--bundle",
-      "--platform=node",
-      "--format=cjs",
-      "--target=node20",
-      `--outfile=${WA_WORKER_OUTPUT}`,
-      "--external:electron",
-      // Baileys' runtime-optional features — wrapped in try/catch at the
-      // call site and not used by Craft Agent (we send text + documents, no
-      // link previews, no inline image processing, no terminal QR).
-      "--external:link-preview-js",
-      "--external:qrcode-terminal",
-      "--external:jimp",
-    ],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    console.error("❌ WhatsApp worker build failed with exit code", exitCode);
-    process.exit(exitCode);
-  }
-
-  if (!existsSync(WA_WORKER_OUTPUT)) {
-    console.error("❌ WhatsApp worker output not found at", WA_WORKER_OUTPUT);
-    process.exit(1);
-  }
-
-  console.log("✅ WhatsApp worker built successfully");
-}
-
 async function main(): Promise<void> {
   loadEnvFile();
 
@@ -325,21 +267,15 @@ async function main(): Promise<void> {
   // Depends on session-tools-core being built first
   await buildSessionServer();
 
-  // Build Pi agent server (subprocess for Pi SDK sessions)
-  await buildPiAgentServer();
-
-  // Build unified network interceptor (CJS bundle for Node.js --require)
+  // Small interceptor before main — Pi agent is last so its huge bundle does not run right before main.
   await buildInterceptor();
-
-  // Build WhatsApp worker (Baileys subprocess — optional package)
-  await buildWhatsAppWorker();
 
   const buildDefines = getBuildDefines();
 
-  console.log("🔨 Building main process...");
+  console.log("🔨 Building main process (esbuild)…");
 
-  const proc = spawn({
-    cmd: [
+  const exitCode = await spawnWithOomRetry(
+    [
       "bun", "run", "esbuild",
       "apps/electron/src/main/index.ts",
       "--bundle",
@@ -347,26 +283,25 @@ async function main(): Promise<void> {
       "--format=cjs",
       "--outfile=apps/electron/dist/main.cjs",
       "--external:electron",
-      // Replace grammY's bundled polyfills (node-fetch@2 + abort-controller@3)
-      // with native Node globals. esbuild otherwise renames the polyfill's
-      // `class AbortSignal` to `_AbortSignal` to dodge collision with the
-      // global, which then breaks node-fetch@2's `constructor.name` check and
-      // fails every Telegram API call with a TypeError.
       "--alias:node-fetch=./apps/electron/src/main/shims/node-fetch.cjs",
       "--alias:abort-controller=./apps/electron/src/main/shims/abort-controller.cjs",
       ...buildDefines,
     ],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  const exitCode = await proc.exited;
+    ROOT_DIR,
+    { label: "Main process esbuild" },
+  );
 
   if (exitCode !== 0) {
     console.error("❌ esbuild failed with exit code", exitCode);
+    if (exitCode === 137) {
+      console.error(
+        "   Hint: export CRAFT_ESBUILD_GOMAXPROCS=1 before building; Pi agent is built after main to reduce RAM spikes.",
+      );
+    }
     process.exit(exitCode);
   }
+
+  await buildPiAgentServer();
 
   // Wait for file to stabilize
   console.log("⏳ Waiting for file to stabilize...");

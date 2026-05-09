@@ -1,6 +1,6 @@
 /**
- * Embeds the existing Express API on a loopback HTTP server (random port) inside Electron main.
- * Renderer never talks to this URL — only the main process uses it for parity with the former bot HTTP surface.
+ * Embeds the existing Express API on a loopback HTTP server (random port) in the poly child process.
+ * The renderer never receives this URL: Electron main proxies `/api/*` via typed IPC (`POLY_IPC_CHANNELS.HTTP_REQUEST`).
  */
 import http from 'node:http';
 import { createLogger } from '../logger';
@@ -51,8 +51,11 @@ export async function startInternalPolyHttpHost(): Promise<PolyInternalHttpHost>
   const baseUrl = `http://127.0.0.1:${port}`;
 
   registerMainHttpServer(server);
+  // Defer heavy services so the parent process can read POLY_READY quickly (Electron subprocess handshake).
   if (isOnboardingCompleteCached()) {
-    startHeavyServicesIfIdle(server, 'full');
+    setImmediate(() => {
+      startHeavyServicesIfIdle(server, 'full');
+    });
   } else {
     log.info('onboarding: heavy services deferred until setup complete');
   }

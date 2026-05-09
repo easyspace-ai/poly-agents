@@ -9,6 +9,7 @@
 import { spawn } from "bun";
 import { existsSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
+import { spawnWithOomRetry } from "./spawn-build-guard";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const DIST_DIR = join(ROOT_DIR, "apps/electron/dist");
@@ -82,9 +83,9 @@ async function verifyJsFile(filePath: string): Promise<{ valid: boolean; error?:
   return { valid: true };
 }
 
-async function buildEntry(entry: string, outfile: string): Promise<number> {
-  const proc = spawn({
-    cmd: [
+async function buildEntry(entry: string, outfile: string, label: string): Promise<number> {
+  return spawnWithOomRetry(
+    [
       "bun", "run", "esbuild",
       entry,
       "--bundle",
@@ -93,12 +94,9 @@ async function buildEntry(entry: string, outfile: string): Promise<number> {
       `--outfile=${outfile}`,
       "--external:electron",
     ],
-    cwd: ROOT_DIR,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-
-  return proc.exited;
+    ROOT_DIR,
+    { label },
+  );
 }
 
 async function main(): Promise<void> {
@@ -109,7 +107,7 @@ async function main(): Promise<void> {
   console.log("🔨 Building preload entries...");
 
   for (const output of OUTPUTS) {
-    const exitCode = await buildEntry(output.entry, output.outfile);
+    const exitCode = await buildEntry(output.entry, output.outfile, output.label);
     if (exitCode !== 0) {
       console.error(`❌ Failed to build ${output.label} (exit code ${exitCode})`);
       process.exit(exitCode);

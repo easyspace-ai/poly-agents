@@ -42,6 +42,10 @@ import SkillInfoPage from '@/pages/SkillInfoPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { AutomationInfoPage } from '../automations/AutomationInfoPage'
 import { SpmaNavigatorPanel } from '@/components/spma/SpmaNavigatorPanel'
+import { SpmaPolyAccountsMainPanel } from '@/components/spma/SpmaPolyAccountsMainPanel'
+import { SpmaPolyMarketsMainPanel } from '@/components/spma/SpmaPolyMarketsMainPanel'
+import { SpmaPolyRiskMainPanel } from '@/components/spma/SpmaPolyRiskMainPanel'
+import { SpmaPolyHistoryMainPanel } from '@/components/spma/SpmaPolyHistoryMainPanel'
 import type { ExecutionEntry } from '../automations/types'
 import { automationsAtom } from '@/atoms/automations'
 import { SendResourceToWorkspaceDialog, type SendResourceType } from './SendResourceToWorkspaceDialog'
@@ -232,12 +236,40 @@ export function MainContentPanel({
     </StoplightProvider>
   )
 
-  // SPMA primary views (detail column — same placeholder until pages are ported)
+  // SPMA: list tabs use main detail column; setup keeps navigator-style body.
   if (isPolyNavigation(navState)) {
+    if (navState.tab === 'accounts') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SpmaPolyAccountsMainPanel accountId={navState.accountId ?? null} />
+        </Panel>
+      )
+    }
+    if (navState.tab === 'markets') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SpmaPolyMarketsMainPanel marketId={navState.marketId ?? null} />
+        </Panel>
+      )
+    }
+    if (navState.tab === 'risk') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SpmaPolyRiskMainPanel positionId={navState.riskPositionId ?? null} />
+        </Panel>
+      )
+    }
+    if (navState.tab === 'history') {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <SpmaPolyHistoryMainPanel tradeId={navState.historyTradeId ?? null} />
+        </Panel>
+      )
+    }
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <SpmaNavigatorPanel tab={navState.tab} />
-      </Panel>
+      </Panel>,
     )
   }
 

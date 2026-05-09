@@ -50,6 +50,14 @@ export interface ParsedCompoundRoute {
   automationFilter?: AutomationFilter
   /** Active SPMA tab (only for poly navigator) */
   polyTab?: PolyTab
+  /** Selected Polymarket account id when `polyTab === 'accounts'` */
+  polyAccountId?: string
+  /** Selected market id when `polyTab === 'markets'` */
+  polyMarketId?: string
+  /** Selected risk position id when `polyTab === 'risk'` */
+  polyRiskPositionId?: string
+  /** Selected trade id when `polyTab === 'history'` */
+  polyHistoryTradeId?: string
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -102,9 +110,32 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   if (first === 'poly') {
     const tab = (segments[1] || 'markets') as string
     if (!isValidPolyTab(tab)) return null
+    const detailTabs = new Set(['accounts', 'markets', 'risk', 'history'])
+    if (!detailTabs.has(tab) && segments.length > 2) return null
+    if (detailTabs.has(tab) && segments.length > 3) return null
+    let polyAccountId: string | undefined
+    let polyMarketId: string | undefined
+    let polyRiskPositionId: string | undefined
+    let polyHistoryTradeId: string | undefined
+    if (tab === 'accounts' && segments[2]) {
+      polyAccountId = decodeURIComponent(segments[2])
+    }
+    if (tab === 'markets' && segments[2]) {
+      polyMarketId = decodeURIComponent(segments[2])
+    }
+    if (tab === 'risk' && segments[2]) {
+      polyRiskPositionId = decodeURIComponent(segments[2])
+    }
+    if (tab === 'history' && segments[2]) {
+      polyHistoryTradeId = decodeURIComponent(segments[2])
+    }
     return {
       navigator: 'poly',
       polyTab: tab,
+      polyAccountId,
+      polyMarketId,
+      polyRiskPositionId,
+      polyHistoryTradeId,
       details: null,
     }
   }
@@ -271,7 +302,20 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
  */
 export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'poly') {
-    return `poly/${parsed.polyTab ?? 'markets'}`
+    const tab = parsed.polyTab ?? 'markets'
+    if (tab === 'accounts' && parsed.polyAccountId) {
+      return `poly/accounts/${encodeURIComponent(parsed.polyAccountId)}`
+    }
+    if (tab === 'markets' && parsed.polyMarketId) {
+      return `poly/markets/${encodeURIComponent(parsed.polyMarketId)}`
+    }
+    if (tab === 'risk' && parsed.polyRiskPositionId) {
+      return `poly/risk/${encodeURIComponent(parsed.polyRiskPositionId)}`
+    }
+    if (tab === 'history' && parsed.polyHistoryTradeId) {
+      return `poly/history/${encodeURIComponent(parsed.polyHistoryTradeId)}`
+    }
+    return `poly/${tab}`
   }
 
   if (parsed.navigator === 'settings') {
@@ -396,7 +440,20 @@ export function parseRoute(route: string): ParsedRoute | null {
 function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute {
   if (compound.navigator === 'poly') {
     const tab = compound.polyTab ?? 'markets'
-    return { type: 'view', name: 'poly', id: tab, params: {} }
+    const params: Record<string, string> = {}
+    if (compound.polyAccountId) {
+      params.accountId = compound.polyAccountId
+    }
+    if (compound.polyMarketId) {
+      params.marketId = compound.polyMarketId
+    }
+    if (compound.polyRiskPositionId) {
+      params.riskPositionId = compound.polyRiskPositionId
+    }
+    if (compound.polyHistoryTradeId) {
+      params.historyTradeId = compound.polyHistoryTradeId
+    }
+    return { type: 'view', name: 'poly', id: tab, params }
   }
 
   // Settings
@@ -517,7 +574,14 @@ export function parseRouteToNavigationState(
  */
 function convertCompoundToNavigationState(compound: ParsedCompoundRoute): NavigationState {
   if (compound.navigator === 'poly') {
-    return { navigator: 'poly', tab: compound.polyTab ?? 'markets' }
+    const tab = compound.polyTab ?? 'markets'
+    const accountId =
+      tab === 'accounts' && compound.polyAccountId ? compound.polyAccountId : null
+    const marketId = tab === 'markets' && compound.polyMarketId ? compound.polyMarketId : null
+    const riskPositionId = tab === 'risk' && compound.polyRiskPositionId ? compound.polyRiskPositionId : null
+    const historyTradeId =
+      tab === 'history' && compound.polyHistoryTradeId ? compound.polyHistoryTradeId : null
+    return { navigator: 'poly', tab, accountId, marketId, riskPositionId, historyTradeId }
   }
 
   // Settings
@@ -609,7 +673,22 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'settings', subpage: 'preferences' }
     case 'poly':
       if (parsed.id && isValidPolyTab(parsed.id)) {
-        return { navigator: 'poly', tab: parsed.id }
+        const aid = parsed.params?.accountId
+        const mid = parsed.params?.marketId
+        const rid = parsed.params?.riskPositionId
+        const hid = parsed.params?.historyTradeId
+        return {
+          navigator: 'poly',
+          tab: parsed.id,
+          accountId:
+            parsed.id === 'accounts' && typeof aid === 'string' && aid.length > 0 ? aid : null,
+          marketId:
+            parsed.id === 'markets' && typeof mid === 'string' && mid.length > 0 ? mid : null,
+          riskPositionId:
+            parsed.id === 'risk' && typeof rid === 'string' && rid.length > 0 ? rid : null,
+          historyTradeId:
+            parsed.id === 'history' && typeof hid === 'string' && hid.length > 0 ? hid : null,
+        }
       }
       return { navigator: 'poly', tab: 'markets' }
     case 'sources':
@@ -730,6 +809,12 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'poly',
       polyTab: state.tab,
+      polyAccountId:
+        state.tab === 'accounts' && state.accountId ? state.accountId : undefined,
+      polyMarketId: state.tab === 'markets' && state.marketId ? state.marketId : undefined,
+      polyRiskPositionId: state.tab === 'risk' && state.riskPositionId ? state.riskPositionId : undefined,
+      polyHistoryTradeId:
+        state.tab === 'history' && state.historyTradeId ? state.historyTradeId : undefined,
       details: null,
     }
   }

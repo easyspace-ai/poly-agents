@@ -1,14 +1,12 @@
 /**
  * MessagingSessionMenuItem
  *
- * The "Connect Messaging → Telegram / WhatsApp" submenu block shared by
+ * The "Connect Messaging → Telegram / Lark" submenu block shared by
  * SessionMenu (real context/dropdown menus) and the playground preview.
  *
  * Behavior:
- *  - If the target platform isn't connected yet, route the user to the right
- *    setup entry point (WhatsApp opens the connect dialog; Telegram defaults
- *    to navigating to messaging settings + toasting — callers can override
- *    that via `onTelegramNotConfigured`).
+ *  - If the target platform isn't connected yet, route the user to messaging
+ *    settings (Telegram/Lark) — callers can override via `onTelegramNotConfigured`.
  *  - If the platform is connected, dispatch `messagingDialogAtom` with a
  *    pairing-code dialog and kick off `generateMessagingPairingCode`.
  *
@@ -53,7 +51,7 @@ export function MessagingSessionMenuItem({
   const setMessagingDialog = useSetAtom(messagingDialogAtom)
   const { MenuItem, Sub, SubTrigger, SubContent } = useMenuComponents()
 
-  const handleConnectMessaging = async (platform: 'telegram' | 'whatsapp' | 'lark') => {
+  const handleConnectMessaging = async (platform: 'telegram' | 'lark') => {
     // First-run check — avoid hitting the server if the platform is not
     // connected. Failure to read config is treated as "unknown" and falls
     // through to attempting pairing so the server surfaces a real error.
@@ -62,13 +60,9 @@ export function MessagingSessionMenuItem({
       const runtime = cfg?.runtime?.[platform]
       const isConnected = Boolean(runtime?.connected)
       if (!isConnected) {
-        if (platform === 'whatsapp') {
-          setMessagingDialog({ kind: 'wa_connect', continueToPairingSessionId: sessionId })
-        } else if (onTelegramNotConfigured) {
+        if (onTelegramNotConfigured) {
           onTelegramNotConfigured()
         } else {
-          // Telegram + Lark share the "open Settings" path — both use
-          // a Settings dialog rather than an inline connect flow.
           navigate(routes.view.settings('messaging'))
           toast.info(t('toast.telegramNotConfiguredOpenSettings'))
         }
@@ -116,9 +110,6 @@ export function MessagingSessionMenuItem({
       <SubContent>
         <MenuItem onClick={() => handleConnectMessaging('telegram')}>
           <span>Telegram</span>
-        </MenuItem>
-        <MenuItem onClick={() => handleConnectMessaging('whatsapp')}>
-          <span>WhatsApp</span>
         </MenuItem>
         <MenuItem onClick={() => handleConnectMessaging('lark')}>
           <span>Lark / Feishu</span>

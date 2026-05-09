@@ -60,16 +60,12 @@ export type MessagingDialogState =
   | { kind: 'closed' }
   | {
       kind: 'pairing'
-      platform: 'telegram' | 'whatsapp' | 'lark'
+      platform: 'telegram' | 'lark'
       sessionId: string
       code: string | null
       expiresAt: number | null
       botUsername?: string
       error?: string
-    }
-  | {
-      kind: 'wa_connect'
-      continueToPairingSessionId?: string
     }
 
 export const messagingDialogAtom = atom<MessagingDialogState>({ kind: 'closed' })

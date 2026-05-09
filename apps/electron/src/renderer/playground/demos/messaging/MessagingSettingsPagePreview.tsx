@@ -3,7 +3,7 @@
  *
  * Thin playground wrapper around the real MessagingSettingsPage that drives
  * the mock messaging state via `window.__playgroundMessaging` based on
- * variant props. Lets you toggle Telegram/WhatsApp connection status and
+ * variant props. Lets you toggle Telegram/Lark connection status and
  * seed bindings without the component needing playground-specific props.
  */
 
@@ -52,8 +52,8 @@ function buildBindings(preset: BindingsPreset): MessagingBinding[] {
           ...base,
           id: 'binding-2',
           sessionId: 'session-bbb',
-          platform: 'whatsapp',
-          channelId: '36201234567@s.whatsapp.net',
+          platform: 'lark',
+          channelId: 'oc_1234567890',
           channelName: 'Standup Bot',
           createdAt: Date.now() - 86_400_000,
         },
@@ -84,7 +84,7 @@ const MOCK_SESSION_META: Record<string, SessionMeta> = {
   'session-bbb': {
     id: 'session-bbb',
     workspaceId: PLAYGROUND_WORKSPACE_ID,
-    name: 'Standup Bot — WhatsApp workflow',
+    name: 'Standup Bot — Lark workflow',
   },
   'session-ccc': {
     id: 'session-ccc',
@@ -95,13 +95,13 @@ const MOCK_SESSION_META: Record<string, SessionMeta> = {
 
 export interface MessagingSettingsPagePreviewProps {
   telegramConnected: boolean
-  whatsappConnected: boolean
+  larkConnected: boolean
   bindings: BindingsPreset
 }
 
 export function MessagingSettingsPagePreview({
   telegramConnected,
-  whatsappConnected,
+  larkConnected,
   bindings,
 }: MessagingSettingsPagePreviewProps) {
   const setBindingsAtom = useSetAtom(setMessagingBindingsAtom)
@@ -133,11 +133,11 @@ export function MessagingSettingsPagePreview({
   }, [telegramConnected])
 
   React.useEffect(() => {
-    playgroundMessagingHandle.setWhatsAppConnected(
-      whatsappConnected,
-      whatsappConnected ? 'Gyula' : undefined,
+    playgroundMessagingHandle.setLarkConnected(
+      larkConnected,
+      larkConnected ? 'Playground Lark Bot' : undefined,
     )
-  }, [whatsappConnected])
+  }, [larkConnected])
 
   React.useEffect(() => {
     const seeded = buildBindings(bindings)

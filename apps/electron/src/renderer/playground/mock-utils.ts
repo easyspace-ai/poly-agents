@@ -18,11 +18,9 @@ import type {
 // ============================================================================
 //
 // The real messaging flow is driven by IPC push events (platform status,
-// binding changes, WhatsApp pairing phases). To make the messaging UI
-// previewable, we replace those IPC calls with an in-memory event bus and
-// expose a `window.__playgroundMessaging` handle so variant/preview wrappers
-// can flip state (connected ↔ disconnected, WhatsApp phase, bindings) without
-// remounting the component.
+// binding changes). To make the messaging UI previewable, we replace those
+// IPC calls with an in-memory event bus and expose `window.__playgroundMessaging`
+// so variant wrappers can flip state without remounting.
 
 type PlatformStatusListener = (
   workspaceId: string,
@@ -30,11 +28,9 @@ type PlatformStatusListener = (
   status: MessagingPlatformRuntimeInfo,
 ) => void
 type BindingListener = (workspaceId: string) => void
-type WhatsAppEventListener = (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void
-
 const PLAYGROUND_WORKSPACE_ID = 'playground-workspace'
 
-type AllowListPlatform = 'telegram' | 'whatsapp' | 'lark'
+type AllowListPlatform = 'telegram' | 'lark'
 
 interface AllowListState {
   accessMode: PlatformAccessMode
@@ -47,17 +43,16 @@ interface AllowListState {
 interface MessagingMockState {
   runtime: {
     telegram: MessagingPlatformRuntimeInfo
-    whatsapp: MessagingPlatformRuntimeInfo
+    lark: MessagingPlatformRuntimeInfo
   }
   bindings: MessagingBinding[]
   /** Workspace-level allow-list state per platform (Phase 1 mock surface). */
   allowList: Record<AllowListPlatform, AllowListState>
   platformStatusListeners: Set<PlatformStatusListener>
   bindingListeners: Set<BindingListener>
-  waEventListeners: Set<WhatsAppEventListener>
 }
 
-function defaultRuntime(platform: 'telegram' | 'whatsapp'): MessagingPlatformRuntimeInfo {
+function defaultRuntime(platform: 'telegram' | 'lark'): MessagingPlatformRuntimeInfo {
   return {
     platform,
     configured: false,
@@ -74,20 +69,18 @@ function defaultAllowList(): AllowListState {
 const messagingMockState: MessagingMockState = {
   runtime: {
     telegram: defaultRuntime('telegram'),
-    whatsapp: defaultRuntime('whatsapp'),
+    lark: defaultRuntime('lark'),
   },
   bindings: [],
   allowList: {
     telegram: defaultAllowList(),
-    whatsapp: defaultAllowList(),
     lark: defaultAllowList(),
   },
   platformStatusListeners: new Set(),
   bindingListeners: new Set(),
-  waEventListeners: new Set(),
 }
 
-function emitPlatformStatus(platform: 'telegram' | 'whatsapp') {
+function emitPlatformStatus(platform: 'telegram' | 'lark') {
   const status = messagingMockState.runtime[platform]
   for (const listener of messagingMockState.platformStatusListeners) {
     try { listener(PLAYGROUND_WORKSPACE_ID, platform, status) } catch (err) { console.error(err) }
@@ -100,19 +93,12 @@ function emitBindingChanged() {
   }
 }
 
-function emitWhatsAppEvent(event: WhatsAppUiEvent) {
-  for (const listener of messagingMockState.waEventListeners) {
-    try { listener({ workspaceId: PLAYGROUND_WORKSPACE_ID, event }) } catch (err) { console.error(err) }
-  }
-}
-
 export interface PlaygroundMessagingHandle {
   /** Snapshot of current state (for debugging from DevTools). */
   state: MessagingMockState
   setTelegramConnected: (connected: boolean, identity?: string) => void
-  setWhatsAppConnected: (connected: boolean, identity?: string) => void
+  setLarkConnected: (connected: boolean, identity?: string) => void
   setBindings: (bindings: MessagingBinding[]) => void
-  fireWAEvent: (event: WhatsAppUiEvent) => void
   reset: () => void
 }
 
@@ -146,33 +132,29 @@ export const playgroundMessagingHandle: PlaygroundMessagingHandle = {
     }
     emitPlatformStatus('telegram')
   },
-  setWhatsAppConnected(connected, identity) {
-    messagingMockState.runtime.whatsapp = {
-      platform: 'whatsapp',
+  setLarkConnected(connected, identity) {
+    messagingMockState.runtime.lark = {
+      platform: 'lark',
       configured: connected,
       connected,
       state: connected ? 'connected' : 'disconnected',
       identity,
       updatedAt: Date.now(),
     }
-    emitPlatformStatus('whatsapp')
+    emitPlatformStatus('lark')
   },
   setBindings(bindings) {
     messagingMockState.bindings = bindings
     emitBindingChanged()
   },
-  fireWAEvent(event) {
-    emitWhatsAppEvent(event)
-  },
   reset() {
     messagingMockState.runtime.telegram = defaultRuntime('telegram')
-    messagingMockState.runtime.whatsapp = defaultRuntime('whatsapp')
+    messagingMockState.runtime.lark = defaultRuntime('lark')
     messagingMockState.bindings = []
     messagingMockState.allowList.telegram = defaultAllowList()
-    messagingMockState.allowList.whatsapp = defaultAllowList()
     messagingMockState.allowList.lark = defaultAllowList()
     emitPlatformStatus('telegram')
-    emitPlatformStatus('whatsapp')
+    emitPlatformStatus('lark')
     emitBindingChanged()
   },
 }
@@ -192,7 +174,6 @@ export const playgroundAllowListHandle: PlaygroundAllowListHandle = {
   },
   reset() {
     messagingMockState.allowList.telegram = defaultAllowList()
-    messagingMockState.allowList.whatsapp = defaultAllowList()
     messagingMockState.allowList.lark = defaultAllowList()
   },
 }
@@ -379,7 +360,7 @@ export const mockElectronAPI = {
   },
 
   // ------------------------------------------------------------------
-  // Messaging Gateway (Telegram + WhatsApp)
+  // Messaging Gateway (Telegram + Lark)
   // ------------------------------------------------------------------
 
   getMessagingConfig: async () => {
@@ -388,11 +369,11 @@ export const mockElectronAPI = {
       enabled: true,
       platforms: {
         telegram: { enabled: true },
-        whatsapp: { enabled: true },
+        lark: { enabled: true },
       },
       runtime: {
         telegram: messagingMockState.runtime.telegram,
-        whatsapp: messagingMockState.runtime.whatsapp,
+        lark: messagingMockState.runtime.lark,
       },
     }
   },
@@ -418,13 +399,13 @@ export const mockElectronAPI = {
   disconnectMessagingPlatform: async (platform: string) => {
     console.log('[Playground] disconnectMessagingPlatform called:', platform)
     if (platform === 'telegram') playgroundMessagingHandle.setTelegramConnected(false)
-    if (platform === 'whatsapp') playgroundMessagingHandle.setWhatsAppConnected(false)
+    if (platform === 'lark') playgroundMessagingHandle.setLarkConnected(false)
   },
 
   forgetMessagingPlatform: async (platform: string) => {
     console.log('[Playground] forgetMessagingPlatform called:', platform)
     if (platform === 'telegram') playgroundMessagingHandle.setTelegramConnected(false)
-    if (platform === 'whatsapp') playgroundMessagingHandle.setWhatsAppConnected(false)
+    if (platform === 'lark') playgroundMessagingHandle.setLarkConnected(false)
     // Drop bindings for that platform
     playgroundMessagingHandle.setBindings(
       messagingMockState.bindings.filter((b) => b.platform !== platform),
@@ -501,7 +482,6 @@ export const mockElectronAPI = {
     if (!platform) {
       return [
         ...messagingMockState.allowList.telegram.pending,
-        ...messagingMockState.allowList.whatsapp.pending,
         ...messagingMockState.allowList.lark.pending,
       ]
     }
@@ -612,32 +592,21 @@ export const mockElectronAPI = {
     }
   },
 
-  // WhatsApp subprocess-based pairing — we fire a synthetic QR after a short
-  // delay so the "show_qr" phase is visible by default, but variants can
-  // override this by calling __playgroundMessaging.fireWAEvent().
+  // WhatsApp is not shipped in this product build — stubs satisfy ElectronAPI.
   startWhatsAppConnect: async () => {
-    console.log('[Playground] startWhatsAppConnect called')
-    setTimeout(() => {
-      emitWhatsAppEvent({
-        type: 'qr',
-        qr: 'playground://whatsapp/qr/' + Math.random().toString(36).slice(2),
-      })
-    }, 400)
-    return { success: true }
+    console.log('[Playground] startWhatsAppConnect called (stub)')
+    return { success: false }
   },
 
   submitWhatsAppPhone: async (phoneNumber: string) => {
-    console.log('[Playground] submitWhatsAppPhone called:', phoneNumber)
-    return { success: true }
+    console.log('[Playground] submitWhatsAppPhone called (stub):', phoneNumber)
+    return { success: false }
   },
 
   onWhatsAppEvent: (
-    callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void,
+    _callback: (payload: { workspaceId: string; event: WhatsAppUiEvent }) => void,
   ) => {
-    messagingMockState.waEventListeners.add(callback)
-    return () => {
-      messagingMockState.waEventListeners.delete(callback)
-    }
+    return () => {}
   },
 }
 

@@ -3,8 +3,7 @@
  *
  * Renders a focused demo of just the "Connect Messaging" submenu shared with
  * the real SessionMenu. Clicking either branch runs the same code path:
- *   - When the platform is not connected, it opens the WhatsApp connect
- *     dialog (WhatsApp) or toasts (Telegram — playground has no router).
+ *   - When the platform is not connected, it toasts (playground has no router).
  *   - When connected, it dispatches a pairing dialog via messagingDialogAtom.
  *
  * We mount <MessagingDialogHost /> so the dispatched dialogs actually show
@@ -25,14 +24,14 @@ import { playgroundMessagingHandle } from '../../mock-utils'
 
 export interface MessagingSubmenuPreviewProps {
   telegramConnected: boolean
-  whatsappConnected: boolean
+  larkConnected: boolean
 }
 
 const PLAYGROUND_SESSION_ID = 'playground-session-xyz'
 
 export function MessagingSubmenuPreview({
   telegramConnected,
-  whatsappConnected,
+  larkConnected,
 }: MessagingSubmenuPreviewProps) {
   const { t } = useTranslation()
 
@@ -46,11 +45,11 @@ export function MessagingSubmenuPreview({
   }, [telegramConnected])
 
   React.useEffect(() => {
-    playgroundMessagingHandle.setWhatsAppConnected(
-      whatsappConnected,
-      whatsappConnected ? 'Gyula' : undefined,
+    playgroundMessagingHandle.setLarkConnected(
+      larkConnected,
+      larkConnected ? 'Playground Lark Bot' : undefined,
     )
-  }, [whatsappConnected])
+  }, [larkConnected])
 
   return (
     <div className="flex flex-col items-start gap-4 p-6">

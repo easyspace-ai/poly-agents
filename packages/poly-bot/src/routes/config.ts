@@ -82,6 +82,27 @@ function validateConfigPut(key: string, value: string): string | null {
     }
   }
 
+  if (key === 'pollingInterval') {
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed < 5) {
+      return 'pollingInterval must be an integer ≥ 5 (seconds)';
+    }
+  }
+
+  if (key === 'maxTradeSize') {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1_000_000_000) {
+      return 'maxTradeSize must be a finite number > 0 and ≤ 1000000000';
+    }
+  }
+
+  if (key === 'slippageTolerance') {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
+      return 'slippageTolerance must be a number between 0 and 1 (e.g. 0.05 for 5%)';
+    }
+  }
+
   if (key === 'priceStopLossRanges') {
     let parsed: unknown;
     try {

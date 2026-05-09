@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { isHex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { prisma } from '../db';
+import { autoCompleteOnboardingIfTradingReady } from '../heavyServices';
 import { invalidatePolymarketClientCache } from '../services/polymarketTrading';
 import { provisionPolymarketFromPrivateKey } from '../services/polymarketProvision';
 import { createLogger } from '../logger';
@@ -86,6 +87,7 @@ router.post('/api/polymarket/accounts', async (req: Request, res: Response) => {
   });
 
   invalidatePolymarketClientCache();
+  await autoCompleteOnboardingIfTradingReady();
 
   log.info({ id: created.id, isActive: created.isActive }, 'polymarket account created');
   res.status(201).json({
@@ -110,6 +112,7 @@ router.patch('/api/polymarket/accounts/:id/activate', async (req: Request, res: 
   });
 
   invalidatePolymarketClientCache();
+  await autoCompleteOnboardingIfTradingReady();
   res.json({ ok: true, id });
 });
 
