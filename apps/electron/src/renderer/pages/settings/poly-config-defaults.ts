@@ -17,9 +17,6 @@ export const POLY_BOT_CONFIG_DEFAULTS: Record<string, string> = {
   maxTradeSize: '100',
   slippageTolerance: '0.05',
   orderBookLevels: '10',
-  httpPlatformProxyUrl: '',
-  telegramBotToken: '',
-  telegramAuthorizedChatId: '',
   eventClassificationTags: '["nba","nhl"]',
   priceStopLossRanges: DEFAULT_POLY_PRICE_STOP_LOSS_RANGES_JSON,
   polymarketFokBuyExtraTicks: '5',
@@ -30,8 +27,6 @@ export const POLY_BOT_CONFIG_DEFAULTS: Record<string, string> = {
 
 /** Keys masked in GET /api/config — must match packages/poly-bot/src/routes/config.ts */
 export const POLY_CONFIG_SENSITIVE_KEYS = new Set([
-  'telegramBotToken',
-  'telegramAuthorizedChatId',
   'polymarketApiKey',
   'polymarketSecret',
   'polymarketPassphrase',

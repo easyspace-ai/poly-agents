@@ -50,10 +50,8 @@ function originForLog(raw: string | undefined): string | undefined {
   }
 }
 
-/** DB `httpPlatformProxyUrl` overrides env when non-empty. */
+/** Uses `HTTP_PLATFORM_PROXY_URL` (e.g. injected by Craft Electron from Settings → Network). */
 export function getConfiguredHttpPlatformProxyUrl(): string | undefined {
-  const fromDb = getBotConfigCached('httpPlatformProxyUrl')?.trim();
-  if (fromDb) return fromDb;
   return config.HTTP_PLATFORM_PROXY_URL;
 }
 
@@ -120,14 +118,10 @@ export function getEffectiveHttpPlatformProxyUrl(): string | undefined {
 }
 
 export function getTelegramBotToken(): string | undefined {
-  const fromDb = getBotConfigCached('telegramBotToken')?.trim();
-  if (fromDb) return fromDb;
   return config.TELEGRAM_BOT_TOKEN;
 }
 
 export function getTelegramAuthorizedChatId(): string | undefined {
-  const fromDb = getBotConfigCached('telegramAuthorizedChatId')?.trim();
-  if (fromDb) return fromDb;
   return config.TELEGRAM_AUTHORIZED_CHAT_ID;
 }
 

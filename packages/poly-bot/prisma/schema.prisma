@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  // Isolated client for @craft-agent/poly-bot (avoids clashing with other Prisma apps in the monorepo).
+  // Isolated client for @poly-agents/poly-bot (avoids clashing with other Prisma apps in the monorepo).
   output   = "../src/generated/prisma"
 }
 

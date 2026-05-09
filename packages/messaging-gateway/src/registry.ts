@@ -14,15 +14,15 @@
 
 import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import type { PushTarget } from '@craft-agent/shared/protocol'
-import type { CredentialManager } from '@craft-agent/shared/credentials'
+import { RPC_CHANNELS } from '@poly-agents/shared/protocol'
+import type { PushTarget } from '@poly-agents/shared/protocol'
+import type { CredentialManager } from '@poly-agents/shared/credentials'
 import type {
   ISessionManager,
   IMessagingGatewayRegistry,
   MessagingBindingInfo,
   MessagingConfigInfo,
-} from '@craft-agent/server-core/handlers'
+} from '@poly-agents/server-core/handlers'
 
 import { MessagingGateway } from './gateway'
 import { ConfigStore } from './config-store'

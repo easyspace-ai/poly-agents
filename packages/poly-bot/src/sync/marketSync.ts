@@ -97,21 +97,6 @@ async function seedDefaultConfig(): Promise<void> {
       update: {},
     }),
     prisma.botConfig.upsert({
-      where: { key: 'httpPlatformProxyUrl' },
-      create: { key: 'httpPlatformProxyUrl', value: '' },
-      update: {},
-    }),
-    prisma.botConfig.upsert({
-      where: { key: 'telegramBotToken' },
-      create: { key: 'telegramBotToken', value: '' },
-      update: {},
-    }),
-    prisma.botConfig.upsert({
-      where: { key: 'telegramAuthorizedChatId' },
-      create: { key: 'telegramAuthorizedChatId', value: '' },
-      update: {},
-    }),
-    prisma.botConfig.upsert({
       where: { key: 'eventClassificationTags' },
       create: { key: 'eventClassificationTags', value: '["nba","nhl"]' },
       update: {},

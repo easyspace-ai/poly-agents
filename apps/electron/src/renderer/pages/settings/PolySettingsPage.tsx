@@ -1,6 +1,7 @@
 /**
  * SPMA / Polymarket trading settings — migrated from cccc/dashboard Settings.tsx:
- * tabs (general / proxy / telegram / tags / prices), GET+PUT /api/config via poly IPC.
+ * tabs (general / tags / prices), GET+PUT /api/config via poly IPC.
+ * HTTP proxy and Telegram use the app-wide Settings → Network / Messaging (not BotConfig).
  */
 
 import * as React from 'react'
@@ -13,7 +14,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   SettingsSection,
@@ -54,13 +54,7 @@ export const meta: DetailsPageMeta = {
   slug: 'poly',
 }
 
-const RESERVED_CONFIG_KEYS = new Set([
-  'httpPlatformProxyUrl',
-  'telegramBotToken',
-  'telegramAuthorizedChatId',
-  'eventClassificationTags',
-  'priceStopLossRanges',
-])
+const RESERVED_CONFIG_KEYS = new Set(['eventClassificationTags', 'priceStopLossRanges'])
 
 export interface PriceStopLossRangeRow {
   id: string
@@ -145,9 +139,6 @@ export default function PolySettingsPage() {
   const [setupStatus, setSetupStatus] = React.useState<PolySetupStatus | null>(null)
   const [completingSetup, setCompletingSetup] = React.useState(false)
 
-  const [proxyDraft, setProxyDraft] = React.useState('')
-  const [tgTokenDraft, setTgTokenDraft] = React.useState('')
-  const [tgChatDraft, setTgChatDraft] = React.useState('')
   const [tags, setTags] = React.useState<string[]>([...DEFAULT_SPMA_EVENT_TAGS])
   const [tagInput, setTagInput] = React.useState('')
   const [priceRows, setPriceRows] = React.useState<PriceStopLossRangeRow[]>(() =>
@@ -159,9 +150,6 @@ export default function PolySettingsPage() {
   const applyConfigRows = React.useCallback((data: PolyConfigRow[]) => {
     setRows(data)
     setEdited({})
-    setProxyDraft(normalizeDisplayValue('httpPlatformProxyUrl', rowValue(data, 'httpPlatformProxyUrl')))
-    setTgTokenDraft(normalizeDisplayValue('telegramBotToken', rowValue(data, 'telegramBotToken')))
-    setTgChatDraft(normalizeDisplayValue('telegramAuthorizedChatId', rowValue(data, 'telegramAuthorizedChatId')))
     setTags(parseEventClassificationTags(rowValue(data, 'eventClassificationTags')))
     setPriceRows(parsePriceRowsJson(rowValue(data, 'priceStopLossRanges')))
   }, [])
@@ -456,12 +444,6 @@ export default function PolySettingsPage() {
                       <TabsTrigger value="general" className="text-xs shrink-0">
                         {t('settings.poly.tabs.general')}
                       </TabsTrigger>
-                      <TabsTrigger value="proxy" className="text-xs shrink-0">
-                        {t('settings.poly.tabs.proxy')}
-                      </TabsTrigger>
-                      <TabsTrigger value="telegram" className="text-xs shrink-0">
-                        {t('settings.poly.tabs.telegram')}
-                      </TabsTrigger>
                       <TabsTrigger value="tags" className="text-xs shrink-0">
                         {t('settings.poly.tabs.tags')}
                       </TabsTrigger>
@@ -523,95 +505,6 @@ export default function PolySettingsPage() {
                             </SettingsCard>
                           )
                         })}
-                    </TabsContent>
-
-                    <TabsContent value="proxy" className="mt-4">
-                      <SettingsCard divided={false}>
-                        <SettingsCardContent className="space-y-3">
-                          <div className="text-sm font-medium">{t('settings.poly.proxyUrlLabel')}</div>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{t('settings.poly.proxyUrlHelp')}</p>
-                          <Input
-                            value={proxyDraft}
-                            onChange={(e) => setProxyDraft(e.target.value)}
-                            placeholder={t('settings.poly.proxyPlaceholder')}
-                            className="font-mono text-sm"
-                          />
-                        </SettingsCardContent>
-                        <SettingsCardFooter>
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={
-                              saving === 'httpPlatformProxyUrl' ||
-                              proxyDraft === normalizeDisplayValue('httpPlatformProxyUrl', rowValue(rows, 'httpPlatformProxyUrl'))
-                            }
-                            onClick={() =>
-                              void saveStandalone('httpPlatformProxyUrl', proxyDraft, 'settings.poly.savedProxy')
-                            }
-                          >
-                            {saving === 'httpPlatformProxyUrl' ? t('settings.poly.saving') : t('settings.poly.saveProxy')}
-                          </Button>
-                        </SettingsCardFooter>
-                      </SettingsCard>
-                    </TabsContent>
-
-                    <TabsContent value="telegram" className="mt-4">
-                      <SettingsCard divided={false}>
-                        <SettingsCardContent className="space-y-4">
-                          <p className="text-xs text-muted-foreground leading-relaxed">{t('settings.poly.telegramHelp')}</p>
-                          <div className="space-y-2">
-                            <Label className="text-xs">{t('settings.poly.telegramToken')}</Label>
-                            <Input
-                              type="password"
-                              autoComplete="off"
-                              value={tgTokenDraft}
-                              onChange={(e) => setTgTokenDraft(e.target.value)}
-                              className="font-mono text-sm"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs">{t('settings.poly.telegramChat')}</Label>
-                            <Input
-                              value={tgChatDraft}
-                              onChange={(e) => setTgChatDraft(e.target.value)}
-                              className="font-mono text-sm"
-                            />
-                          </div>
-                        </SettingsCardContent>
-                        <SettingsCardFooter>
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={
-                              saving === 'telegram' ||
-                              (tgTokenDraft === normalizeDisplayValue('telegramBotToken', rowValue(rows, 'telegramBotToken')) &&
-                                tgChatDraft ===
-                                  normalizeDisplayValue('telegramAuthorizedChatId', rowValue(rows, 'telegramAuthorizedChatId')))
-                            }
-                            onClick={async () => {
-                              setSaving('telegram')
-                              try {
-                                const tokMasked = rowValue(rows, 'telegramBotToken') === '***'
-                                const chatMasked = rowValue(rows, 'telegramAuthorizedChatId') === '***'
-                                if (!(tokMasked && tgTokenDraft.trim() === '')) {
-                                  await polyPutConfigKey('telegramBotToken', tgTokenDraft)
-                                }
-                                if (!(chatMasked && tgChatDraft.trim() === '')) {
-                                  await polyPutConfigKey('telegramAuthorizedChatId', tgChatDraft)
-                                }
-                                await reloadConfig({ silent: true })
-                                toast.success(t('settings.poly.savedTelegram'))
-                              } catch (err) {
-                                toast.error(err instanceof Error ? err.message : t('settings.poly.saveFailed'))
-                              } finally {
-                                setSaving(null)
-                              }
-                            }}
-                          >
-                            {saving === 'telegram' ? t('settings.poly.saving') : t('settings.poly.saveTelegram')}
-                          </Button>
-                        </SettingsCardFooter>
-                      </SettingsCard>
                     </TabsContent>
 
                     <TabsContent value="tags" className="mt-4">

@@ -49,12 +49,18 @@ export function startHeavyServicesIfIdle(server: Server, mode: 'full' | 'readOnl
       processRiskTasksOnce().catch((err) => apiLog.error({ err }, 'risk task tick failed'));
     }, 3000);
     processRiskTasksOnce().catch((err) => apiLog.error({ err }, 'risk task initial tick failed'));
-    if (getTelegramBotToken() && getTelegramAuthorizedChatId()) {
-      startTelegramBot();
+    const tgToken = getTelegramBotToken();
+    const tgChat = getTelegramAuthorizedChatId();
+    if (tgToken && tgChat) {
+      if (process.env.POLY_ELECTRON === '1') {
+        log.info(
+          'Telegram: outbound trade/notify only in Electron (no poly-bot polling — Messaging gateway owns the bot token)',
+        );
+      } else {
+        startTelegramBot();
+      }
     } else {
-      log.info(
-        'Telegram bot disabled (set TELEGRAM_* in env and/or dashboard BotConfig / 电报)',
-      );
+      log.info('Telegram bot disabled (set TELEGRAM_BOT_TOKEN + TELEGRAM_AUTHORIZED_CHAT_ID in env)');
     }
   }
   log.info({ mode }, 'heavy services started (market sync, platform realtime, WS relay)');

@@ -23,8 +23,8 @@
     "noPropertyAccessFromIndexSignature": false,
     "baseUrl": ".",
     "paths": {
-      "@craft-agent/core": ["./src/index.ts"],
-      "@craft-agent/core/*": ["./src/*"]
+      "@poly-agents/core": ["./src/index.ts"],
+      "@poly-agents/core/*": ["./src/*"]
     },
     "rootDir": "src",
     "outDir": "dist",

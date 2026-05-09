@@ -4,32 +4,16 @@ import { prisma } from '../db';
 import { orderBookCache } from '../services/orderBookCache';
 import { createLogger } from '../logger';
 import { refreshBotConfigCache } from '../botConfigCache';
-import {
-  installAxiosProxyForPolymarket,
-  resetAxiosPolymarketProxy,
-  resetPlatformProxyAgents,
-} from '../proxySupport';
-import { resetOutboundWsProxyAgent } from '../proxiedWebSocket';
-import { areHeavyServicesStarted } from '../heavyServices';
 
 const log = createLogger('config');
 const router = Router();
 
 /** Keys whose values must not appear in `GET /api/config` JSON (browser / logs). */
 const SENSITIVE_CONFIG_KEYS = new Set([
-  'telegramBotToken',
-  'telegramAuthorizedChatId',
   'polymarketApiKey',
   'polymarketSecret',
   'polymarketPassphrase',
 ]);
-
-function applyProxyFromDb(): void {
-  resetPlatformProxyAgents();
-  resetOutboundWsProxyAgent();
-  resetAxiosPolymarketProxy();
-  installAxiosProxyForPolymarket();
-}
 
 function validateConfigPut(key: string, value: string): string | null {
   if (key === 'orderBookLevels') {
@@ -44,13 +28,6 @@ function validateConfigPut(key: string, value: string): string | null {
     if (isNaN(parsed) || parsed < 0 || parsed > 50) {
       return `${key} must be an integer between 0 and 50`;
     }
-  }
-
-  if (key === 'httpPlatformProxyUrl') {
-    const t = value.trim();
-    if (t === '') return null;
-    const r = z.string().url().safeParse(t);
-    if (!r.success) return 'httpPlatformProxyUrl must be empty or a valid http(s) URL';
   }
 
   if (key === 'eventClassificationTags') {
@@ -172,12 +149,6 @@ router.put('/api/config/:key', async (req: Request, res: Response) => {
     await refreshBotConfigCache();
     if (key === 'orderBookLevels') {
       orderBookCache.setTopLevels(parseInt(value, 10));
-    }
-    if (key === 'httpPlatformProxyUrl') {
-      applyProxyFromDb();
-      if (areHeavyServicesStarted()) {
-        void import('../services/polymarketUserWs').then((m) => m.hardResetPolymarketUserWs());
-      }
     }
     res.json(row);
   } catch (err) {

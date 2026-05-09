@@ -1,11 +1,12 @@
 import { createConnection } from 'node:net';
-import WebSocket from 'ws';
+import { ClobUserClient } from '@poly-agents/poly-ws';
+import type { ClobTradeEvent } from '@poly-agents/poly-ws';
 import { createLogger } from '../logger';
 import {
   getEffectiveHttpPlatformProxyUrl,
   httpPlatformProxyLogFields,
 } from '../effectiveBotSettings';
-import { getWebSocketConstructorForProxy, wsHandshakeTimeoutMs } from '../proxiedWebSocket';
+import { wsHandshakeTimeoutMs } from '../proxiedWebSocket';
 import { resolvePolymarketTradingCredentials } from './polymarketTrading';
 import {
   applyPolymarketUserTradeFromWs,
@@ -15,29 +16,21 @@ import { syncRiskPolymarketBookSubscriptions } from './riskPolymarketSubscriptio
 
 const log = createLogger('polymarketUserWs');
 
-const WS_USER = 'wss://ws-subscriptions-clob.polymarket.com/ws/user';
 const PING_INTERVAL_MS = 10_000;
-/** RFC6455 ping frames — helps HTTP proxies that drop idle CONNECT tunnels. */
-const WS_NATIVE_PING_INTERVAL_MS = 20_000;
 const RECONNECT_MS = 4_000;
-/** When outbound proxy TCP probe fails, avoid tight reconnect + log spam. */
 const RECONNECT_AFTER_PROXY_DEAD_MS = 30_000;
-/** Proxy host TCP probe — allow slow links; capped below typical WS handshake budget. */
 const PROXY_TCP_PROBE_MS = 10_000;
 const REST_SYNC_MS = 45_000;
 const BOOK_SUB_SYNC_MS = 12_000;
 const WS_STALE_MS = 75_000;
 
-let ws: WebSocket | null = null;
-let pingTimer: ReturnType<typeof setInterval> | null = null;
-let keepAlivePingTimer: ReturnType<typeof setInterval> | null = null;
+let userClient: ClobUserClient | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let restTimer: ReturnType<typeof setInterval> | null = null;
 let bookSubTimer: ReturnType<typeof setInterval> | null = null;
 let started = false;
 let lastMessageAt: Date | null = null;
 let restSyncLastAt: Date | null = null;
-/** Last non-OK situation for dashboard (cleared on successful `open`). */
 let lastUserWsIssue: string | null = null;
 
 function fmtErr(err: unknown): string {
@@ -68,10 +61,6 @@ function defaultProxyPort(u: URL): number {
   return 80;
 }
 
-/**
- * TCP reachability of the HTTP(S) proxy host:port only (not CONNECT to Polymarket).
- * Used to tell "proxy down / misconfigured" from "proxy OK but WSS path failed".
- */
 async function isProxyHostReachable(proxyUrl: string): Promise<boolean> {
   let u: URL;
   try {
@@ -113,13 +102,12 @@ export function getPolymarketUserWsMeta(): {
   lastMessageAt: string | null;
   restTradesSyncLastAt: string | null;
   lastIssue: string | null;
-  /** True when `HTTP_PLATFORM_PROXY_URL` or BotConfig `httpPlatformProxyUrl` is set (WSS uses CONNECT). */
   outboundProxyConfigured: boolean;
 } {
-  const r = ws?.readyState;
+  const st = userClient?.connectionState;
   return {
-    connected: r === WebSocket.OPEN,
-    connecting: r === WebSocket.CONNECTING,
+    connected: st === 'connected',
+    connecting: st === 'connecting' || st === 'reconnecting',
     lastMessageAt: lastMessageAt?.toISOString() ?? null,
     restTradesSyncLastAt: restSyncLastAt?.toISOString() ?? null,
     lastIssue: lastUserWsIssue,
@@ -139,54 +127,29 @@ function scheduleUserWsReconnect(delayMs: number = RECONNECT_MS): void {
   }, delayMs);
 }
 
-/** Close current socket and reconnect (e.g. after proxy change). */
 export function hardResetPolymarketUserWs(): void {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
-  if (pingTimer) {
-    clearInterval(pingTimer);
-    pingTimer = null;
-  }
-  if (keepAlivePingTimer) {
-    clearInterval(keepAlivePingTimer);
-    keepAlivePingTimer = null;
-  }
-  const s = ws;
-  ws = null;
-  if (s && (s.readyState === WebSocket.OPEN || s.readyState === WebSocket.CONNECTING)) {
+  if (userClient) {
     try {
-      s.close();
+      userClient.disconnect();
     } catch {
       // ignore
     }
+    userClient = null;
   }
   lastUserWsIssue = 'reconnect_after_proxy_change';
   void connectUserWs();
 }
 
-async function sendSubscription(socket: WebSocket): Promise<void> {
-  const creds = await resolvePolymarketTradingCredentials();
-  const payload = {
-    auth: {
-      apiKey: creds.apiKey,
-      secret: creds.secret,
-      passphrase: creds.passphrase,
-    },
-    type: 'user',
-    markets: [] as string[],
-    assets_ids: [] as string[],
-    initial_dump: true,
-  };
-  socket.send(JSON.stringify(payload));
-}
-
 async function connectUserWs(): Promise<void> {
-  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  if (userClient && userClient.connectionState !== 'disconnected') return;
 
+  let creds: Awaited<ReturnType<typeof resolvePolymarketTradingCredentials>>;
   try {
-    await resolvePolymarketTradingCredentials();
+    creds = await resolvePolymarketTradingCredentials();
   } catch (err) {
     lastUserWsIssue = `no_trading_credentials:${fmtErr(err)}`;
     log.warn({ err }, 'polymarket user ws: no trading credentials, skip');
@@ -200,7 +163,7 @@ async function connectUserWs(): Promise<void> {
     if (!alive) {
       lastUserWsIssue = `proxy_unreachable [${proxyTagZh()}]`;
       log.error(
-        { ...userWsProxyLogFields(), url: WS_USER },
+        { ...userWsProxyLogFields() },
         'polymarket user ws: outbound proxy TCP unreachable, delaying reconnect',
       );
       scheduleUserWsReconnect(RECONNECT_AFTER_PROXY_DEAD_MS);
@@ -208,104 +171,73 @@ async function connectUserWs(): Promise<void> {
     }
   }
 
-  const Ws = getWebSocketConstructorForProxy();
-  const viaProxy = Ws !== WebSocket;
-  log.info(
-    { ...userWsProxyLogFields(), viaProxy, url: WS_USER },
-    'polymarket user ws connecting',
+  if (userClient) {
+    try {
+      userClient.disconnect();
+    } catch {
+      // ignore
+    }
+    userClient = null;
+  }
+
+  const viaProxy = Boolean(proxyUrl?.trim());
+  log.info({ ...userWsProxyLogFields(), viaProxy }, 'polymarket user ws connecting (ClobUserClient)');
+
+  userClient = new ClobUserClient(
+    {
+      apiKey: creds.apiKey,
+      secret: creds.secret,
+      passphrase: creds.passphrase,
+    },
+    {
+      ...(proxyUrl?.trim() ? { proxyUrl: proxyUrl.trim() } : {}),
+      connectionTimeout: wsHandshakeTimeoutMs(),
+      heartbeatInterval: PING_INTERVAL_MS,
+      reconnectDelay: RECONNECT_MS,
+      maxReconnectDelay: 60_000,
+    },
   );
 
-  const handshakeTimeout = wsHandshakeTimeoutMs();
-  const socket =
-    Ws === WebSocket
-      ? new WebSocket(WS_USER, { handshakeTimeout })
-      : new Ws(WS_USER, { handshakeTimeout });
-  ws = socket;
-
-  socket.on('open', () => {
+  userClient.on('connected', () => {
     lastUserWsIssue = null;
-    log.info(
-      { ...userWsProxyLogFields(), viaProxy, url: WS_USER },
-      'polymarket user ws connected',
-    );
     touchMessage();
-    sendSubscription(socket).catch((err) => {
-      lastUserWsIssue = `subscribe_send_failed:${fmtErr(err)}`;
-      log.error({ err }, 'user ws subscribe send failed');
-    });
-    if (pingTimer) clearInterval(pingTimer);
-    pingTimer = setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) {
-        try {
-          socket.send('PING');
-        } catch {
-          // ignore
-        }
-      }
-    }, PING_INTERVAL_MS);
-
-    if (keepAlivePingTimer) clearInterval(keepAlivePingTimer);
-    keepAlivePingTimer = setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) {
-        try {
-          socket.ping();
-        } catch {
-          // ignore
-        }
-      }
-    }, WS_NATIVE_PING_INTERVAL_MS);
+    log.info({ ...userWsProxyLogFields(), viaProxy }, 'polymarket user ws connected');
   });
 
-  socket.on('pong', () => {
-    touchMessage();
+  userClient.on('error', (err: Error) => {
+    const msg = fmtErr(err);
+    lastUserWsIssue = `ws_error:${msg} [${proxyTagZh()}]`;
+    log.warn({ err, ...userWsProxyLogFields(), viaProxy }, 'polymarket user ws error');
   });
 
-  socket.on('message', (raw: WebSocket.RawData) => {
+  userClient.on('disconnected', (payload: { code: number; reason: string }) => {
+    const { code, reason } = payload;
+    const why = reason?.length ? reason : '';
+    const base = why ? `closed:${code}:${why.slice(0, 120)}` : `closed:${code}`;
+    lastUserWsIssue = `${base} [${proxyTagZh()}]`;
+    log.warn({ code, why: why.slice(0, 200), ...userWsProxyLogFields(), viaProxy }, 'polymarket user ws closed');
+  });
+
+  userClient.onTrade((ev: ClobTradeEvent) => {
     touchMessage();
-    const text = raw.toString();
-    if (text === 'PONG' || text === 'pong') return;
     void (async () => {
       try {
-        const data = JSON.parse(text) as unknown;
-        const batch = Array.isArray(data) ? data : [data];
-        for (const item of batch) {
-          await applyPolymarketUserTradeFromWs(item);
-        }
+        await applyPolymarketUserTradeFromWs(ev);
         await syncRiskPolymarketBookSubscriptions();
       } catch (err) {
-        log.warn({ err, preview: text.slice(0, 200) }, 'user ws message handling failed');
+        log.warn({ err }, 'user ws trade handling failed');
       }
     })();
   });
 
-  socket.on('error', (err: unknown) => {
-    const msg = fmtErr(err);
-    lastUserWsIssue = `ws_error:${msg} [${proxyTagZh()}]`;
-    log.warn(
-      { err, ...userWsProxyLogFields(), viaProxy, url: WS_USER },
-      'polymarket user ws error',
-    );
-  });
-
-  socket.on('close', (code: number, reason: Buffer) => {
-    const why = reason?.length ? reason.toString() : '';
-    const base = why ? `closed:${code}:${why.slice(0, 120)}` : `closed:${code}`;
-    lastUserWsIssue = `${base} [${proxyTagZh()}]`;
-    log.warn(
-      { code, why: why.slice(0, 200), ...userWsProxyLogFields(), viaProxy, url: WS_USER },
-      'polymarket user ws closed',
-    );
-    if (pingTimer) {
-      clearInterval(pingTimer);
-      pingTimer = null;
-    }
-    if (keepAlivePingTimer) {
-      clearInterval(keepAlivePingTimer);
-      keepAlivePingTimer = null;
-    }
-    if (ws === socket) ws = null;
+  try {
+    await userClient.connect();
+  } catch (err) {
+    lastUserWsIssue = `connect_failed:${fmtErr(err)}`;
+    log.error({ err }, 'polymarket user ws connect failed');
+    userClient = null;
     scheduleUserWsReconnect();
-  });
+  }
 }
 
 async function maybeRestSync(): Promise<void> {

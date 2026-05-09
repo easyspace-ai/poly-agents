@@ -38,12 +38,12 @@ export function isDeveloperFeedbackEnabled(): boolean {
 }
 
 /**
- * Runtime-evaluated check for craft-agents-cli integration.
+ * Runtime-evaluated check for poly-agents-cli integration.
  *
- * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_AGENTS_CLI=1|0.
+ * Defaults to disabled. Override with CRAFT_FEATURE_POLY_AGENTS_CLI=1|0.
  */
-export function isCraftAgentsCliEnabled(): boolean {
-  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_CRAFT_AGENTS_CLI'));
+export function isPolyAgentsCliEnabled(): boolean {
+  const override = parseBooleanEnv(getEnv('CRAFT_FEATURE_POLY_AGENTS_CLI'));
   if (override !== undefined) return override;
   return false;
 }
@@ -72,12 +72,12 @@ export const FEATURE_FLAGS = {
     return isDeveloperFeedbackEnabled();
   },
   /**
-   * Enable craft-agent CLI guidance and guardrails.
+   * Enable poly-agent CLI guidance and guardrails.
    *
-   * Defaults to disabled. Override with CRAFT_FEATURE_CRAFT_AGENTS_CLI=1|0.
+   * Defaults to disabled. Override with CRAFT_FEATURE_POLY_AGENTS_CLI=1|0.
    */
   get craftAgentsCli(): boolean {
-    return isCraftAgentsCliEnabled();
+    return isPolyAgentsCliEnabled();
   },
   /**
    * Enable embedded server settings page.

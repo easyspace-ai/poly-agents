@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach } from 'bun:test';
-import { isDevRuntime, isDeveloperFeedbackEnabled, isCraftAgentsCliEnabled, isEmbeddedServerEnabled } from '../feature-flags.ts';
+import { isDevRuntime, isDeveloperFeedbackEnabled, isPolyAgentsCliEnabled, isEmbeddedServerEnabled } from '../feature-flags.ts';
 
 const ORIGINAL_ENV = {
   NODE_ENV: process.env.NODE_ENV,
   CRAFT_DEBUG: process.env.CRAFT_DEBUG,
   CRAFT_FEATURE_DEVELOPER_FEEDBACK: process.env.CRAFT_FEATURE_DEVELOPER_FEEDBACK,
-  CRAFT_FEATURE_CRAFT_AGENTS_CLI: process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI,
+  CRAFT_FEATURE_POLY_AGENTS_CLI: process.env.CRAFT_FEATURE_POLY_AGENTS_CLI,
   CRAFT_FEATURE_EMBEDDED_SERVER: process.env.CRAFT_FEATURE_EMBEDDED_SERVER,
 };
 
@@ -19,8 +19,8 @@ afterEach(() => {
   if (ORIGINAL_ENV.CRAFT_FEATURE_DEVELOPER_FEEDBACK === undefined) delete process.env.CRAFT_FEATURE_DEVELOPER_FEEDBACK;
   else process.env.CRAFT_FEATURE_DEVELOPER_FEEDBACK = ORIGINAL_ENV.CRAFT_FEATURE_DEVELOPER_FEEDBACK;
 
-  if (ORIGINAL_ENV.CRAFT_FEATURE_CRAFT_AGENTS_CLI === undefined) delete process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI;
-  else process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI = ORIGINAL_ENV.CRAFT_FEATURE_CRAFT_AGENTS_CLI;
+  if (ORIGINAL_ENV.CRAFT_FEATURE_POLY_AGENTS_CLI === undefined) delete process.env.CRAFT_FEATURE_POLY_AGENTS_CLI;
+  else process.env.CRAFT_FEATURE_POLY_AGENTS_CLI = ORIGINAL_ENV.CRAFT_FEATURE_POLY_AGENTS_CLI;
 
   if (ORIGINAL_ENV.CRAFT_FEATURE_EMBEDDED_SERVER === undefined) delete process.env.CRAFT_FEATURE_EMBEDDED_SERVER;
   else process.env.CRAFT_FEATURE_EMBEDDED_SERVER = ORIGINAL_ENV.CRAFT_FEATURE_EMBEDDED_SERVER;
@@ -64,22 +64,18 @@ describe('feature-flags runtime helpers', () => {
     expect(isDeveloperFeedbackEnabled()).toBe(true);
   });
 
-  it('isCraftAgentsCliEnabled defaults to false when no override is set', () => {
-    delete process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI;
+it('isPolyAgentsCliEnabled defaults to false when no override is set', () => {
+      expect(isPolyAgentsCliEnabled()).toBe(false);
+    });
 
-    expect(isCraftAgentsCliEnabled()).toBe(false);
-  });
+    it('isPolyAgentsCliEnabled honors explicit override true', () => {
+      expect(isPolyAgentsCliEnabled()).toBe(true);
+    });
 
-  it('isCraftAgentsCliEnabled honors explicit override true', () => {
-    process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI = '1';
+    it('isPolyAgentsCliEnabled honors explicit override false', () => {
+    process.env.CRAFT_FEATURE_POLY_AGENTS_CLI = '0';
 
-    expect(isCraftAgentsCliEnabled()).toBe(true);
-  });
-
-  it('isCraftAgentsCliEnabled honors explicit override false', () => {
-    process.env.CRAFT_FEATURE_CRAFT_AGENTS_CLI = '0';
-
-    expect(isCraftAgentsCliEnabled()).toBe(false);
+    expect(isPolyAgentsCliEnabled()).toBe(false);
   });
 
   it('isEmbeddedServerEnabled defaults to false when no override is set', () => {

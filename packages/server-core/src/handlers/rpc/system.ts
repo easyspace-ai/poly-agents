@@ -2,19 +2,19 @@ import { resolve } from 'path'
 import { join } from 'path'
 import { homedir } from 'os'
 import { execSync } from 'child_process'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getWorkspaceByNameOrId, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
-import { isSafeExternalUrl } from '@craft-agent/shared/utils/url-safety'
-import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
-import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@poly-agents/shared/protocol'
+import { getWorkspaceByNameOrId, getGitBashPath, setGitBashPath, clearGitBashPath } from '@poly-agents/shared/config'
+import { isSafeExternalUrl } from '@poly-agents/shared/utils/url-safety'
+import { isUsableGitBashPath, validateGitBashPath } from '@poly-agents/server-core/services'
+import { validateFilePath, getWorkspaceAllowedDirs } from '@poly-agents/server-core/handlers'
+import type { RpcServer } from '@poly-agents/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import {
   requestClientOpenExternal,
   requestClientOpenPath,
   requestClientShowInFolder,
   requestClientOpenFileDialog,
-} from '@craft-agent/server-core/transport'
+} from '@poly-agents/server-core/transport'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.theme.GET_SYSTEM_PREFERENCE,
@@ -67,7 +67,7 @@ function collectDeepLinkParams(parsed: URL, pathId?: string): Record<string, str
   return Object.keys(params).length > 0 ? params : undefined
 }
 
-function parseInternalCraftAgentsDeepLink(parsed: URL): ParsedInternalDeepLink | null {
+function parseInternalPolyAgentsDeepLink(parsed: URL): ParsedInternalDeepLink | null {
   if (parsed.protocol !== 'craftagents:') return null
 
   const host = parsed.hostname
@@ -170,12 +170,12 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
 
   // Release notes
   server.handle(RPC_CHANNELS.releaseNotes.GET, async () => {
-    const { getCombinedReleaseNotes } = require('@craft-agent/shared/release-notes') as typeof import('@craft-agent/shared/release-notes')
+    const { getCombinedReleaseNotes } = require('@poly-agents/shared/release-notes') as typeof import('@poly-agents/shared/release-notes')
     return getCombinedReleaseNotes()
   })
 
   server.handle(RPC_CHANNELS.releaseNotes.GET_LATEST_VERSION, async () => {
-    const { getLatestReleaseVersion } = require('@craft-agent/shared/release-notes') as typeof import('@craft-agent/shared/release-notes')
+    const { getLatestReleaseVersion } = require('@poly-agents/shared/release-notes') as typeof import('@poly-agents/shared/release-notes')
     return getLatestReleaseVersion()
   })
 
@@ -284,7 +284,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
       const parsed = new URL(url)
 
       if (parsed.protocol === 'craftagents:') {
-        const deepLink = parseInternalCraftAgentsDeepLink(parsed)
+        const deepLink = parseInternalPolyAgentsDeepLink(parsed)
 
         if (deepLink?.handledNoop) {
           deps.platform.logger.info('[OPEN_URL] Ignoring auth-callback deep link in OPEN_URL handler')

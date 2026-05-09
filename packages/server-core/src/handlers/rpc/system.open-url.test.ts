@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { CLIENT_OPEN_EXTERNAL } from '@craft-agent/server-core/transport'
-import type { RpcServer, HandlerFn, RequestContext } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@poly-agents/shared/protocol'
+import { CLIENT_OPEN_EXTERNAL } from '@poly-agents/server-core/transport'
+import type { RpcServer, HandlerFn, RequestContext } from '@poly-agents/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { registerSystemCoreHandlers } from './system'
 

@@ -1,12 +1,12 @@
 {
-  "name": "@craft-agent/cli",
+  "name": "@poly-agents/cli",
   "version": "0.9.2",
   "license": "Apache-2.0",
-  "description": "Terminal client for Craft Agent server",
+  "description": "Terminal client for Poly Agent server",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
-    "craft-cli": "src/index.ts"
+    "poly-cli": "src/index.ts"
   },
   "scripts": {
     "start": "bun run src/index.ts",
@@ -14,8 +14,8 @@
     "test": "bun test src/"
   },
   "dependencies": {
-    "@craft-agent/shared": "workspace:*",
-    "@craft-agent/server-core": "workspace:*"
+    "@poly-agents/shared": "workspace:*",
+    "@poly-agents/server-core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

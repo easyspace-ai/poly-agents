@@ -1,10 +1,10 @@
 import { Menu, app, shell, BrowserWindow } from 'electron'
-import { i18n } from '@craft-agent/shared/i18n'
+import { i18n } from '@poly-agents/shared/i18n'
 import { RPC_CHANNELS, type BroadcastEventMap } from '../shared/types'
 import { EDIT_MENU, VIEW_MENU, WINDOW_MENU } from '../shared/menu-schema'
 import type { MenuItem } from '../shared/menu-schema'
 import type { WindowManager } from './window-manager'
-import type { EventSink } from '@craft-agent/server-core/transport'
+import type { EventSink } from '@poly-agents/server-core/transport'
 import { mainLog, isDebugMode } from './logger'
 
 type ClientResolver = (webContentsId: number) => string | undefined
@@ -81,21 +81,9 @@ export async function rebuildMenu(): Promise<void> {
     ...(isMac ? [{
       label: 'Craft Agents',
       submenu: [
-        { role: 'about' as const, label: i18n.t('menu.aboutCraftAgents') },
-        updateMenuItem,
-        { type: 'separator' as const },
-        {
-          label: i18n.t("menu.settings"),
-          accelerator: 'CmdOrCtrl+,',
-          registerAccelerator: false,  // Action registry handles the keyboard shortcut
-          click: () => sendToRenderer(RPC_CHANNELS.menu.OPEN_SETTINGS)
-        },
-        { type: 'separator' as const },
-        { role: 'hide' as const, label: i18n.t('menu.hideCraftAgents') },
-        { role: 'hideOthers' as const },
-        { role: 'unhide' as const },
-        { type: 'separator' as const },
-        { role: 'quit' as const, label: i18n.t('menu.quitCraftAgents') }
+{ role: 'about' as const, label: i18n.t('menu.aboutPolyAgents') },
+      { role: 'hide' as const, label: i18n.t('menu.hidePolyAgents') },
+      { role: 'quit' as const, label: i18n.t('menu.quitPolyAgents') }
       ]
     }] : []),
 

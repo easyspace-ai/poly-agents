@@ -23,20 +23,14 @@ function hasOutboundProxyConfigured(): boolean {
   return false;
 }
 
-async function hasOutboundProxyInDb(): Promise<boolean> {
-  const row = await prisma.botConfig.findUnique({ where: { key: 'httpPlatformProxyUrl' } });
-  return Boolean(row?.value?.trim());
-}
-
 router.get('/api/setup/status', async (_req: Request, res: Response) => {
   try {
     await autoCompleteOnboardingIfTradingReady();
     const needsOnboarding = await readNeedsOnboarding();
-    const proxyInDb = await hasOutboundProxyInDb();
     const poly = await hasPolymarketTradingConfigured();
     res.json({
       needsOnboarding,
-      proxyConfigured: hasOutboundProxyConfigured() || proxyInDb,
+      proxyConfigured: hasOutboundProxyConfigured(),
       polymarketConfigured: poly,
     });
   } catch (err) {

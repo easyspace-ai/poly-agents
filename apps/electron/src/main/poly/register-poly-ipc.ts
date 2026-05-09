@@ -1,4 +1,4 @@
-import { POLY_IPC_CHANNELS, parsePolyHttpRequestSpec, type PolyHttpResponseEnvelope } from '@craft-agent/shared/poly-ipc'
+import { POLY_IPC_CHANNELS, parsePolyHttpRequestSpec, type PolyHttpResponseEnvelope } from '@poly-agents/shared/poly-ipc'
 import { ipcMain } from 'electron'
 import log from '../logger'
 

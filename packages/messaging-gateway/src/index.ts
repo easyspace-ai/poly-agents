@@ -1,5 +1,5 @@
 /**
- * @craft-agent/messaging-gateway
+ * @poly-agents/messaging-gateway
  *
  * Messaging gateway for Craft Agent — Telegram, Lark, etc.
  */

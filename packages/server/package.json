@@ -1,11 +1,11 @@
 {
-  "name": "@craft-agent/server",
+  "name": "@poly-agents/server",
   "version": "0.9.2",
-  "description": "Standalone headless Craft Agent server (Bun runtime)",
+  "description": "Standalone headless Poly Agent server (Bun runtime)",
   "type": "module",
   "main": "src/index.ts",
   "bin": {
-    "craft-server": "src/index.ts"
+    "poly-server": "src/index.ts"
   },
   "files": [
     "src/"
@@ -14,21 +14,21 @@
     "bun": ">=1.0.0"
   },
   "author": {
-    "name": "Craft Docs Ltd.",
-    "email": "support@craft.do"
+    "name": "Poly Agents Inc.",
+    "email": "support@polyagents.ai"
   },
   "license": "Apache-2.0",
-  "homepage": "https://agents.craft.do",
+  "homepage": "https://agents.polyagents.ai",
   "scripts": {
     "start": "bun run src/index.ts",
     "generate-token": "bun run src/index.ts --generate-token",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@craft-agent/core": "workspace:*",
-    "@craft-agent/messaging-gateway": "workspace:*",
-    "@craft-agent/server-core": "workspace:*",
-    "@craft-agent/shared": "workspace:*"
+    "@poly-agents/core": "workspace:*",
+    "@poly-agents/messaging-gateway": "workspace:*",
+    "@poly-agents/server-core": "workspace:*",
+    "@poly-agents/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.2",

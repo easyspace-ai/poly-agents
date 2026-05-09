@@ -3,7 +3,7 @@
  * Session MCP Server
  *
  * This MCP server provides session-scoped tools to Codex via stdio transport.
- * It uses the shared handlers from @craft-agent/session-tools-core to ensure
+ * It uses the shared handlers from @poly-agents/session-tools-core to ensure
  * feature parity with Claude's session-scoped tools.
  *
  * Callback Communication:
@@ -32,7 +32,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { isDeveloperFeedbackEnabled } from '@craft-agent/shared/feature-flags';
+import { isDeveloperFeedbackEnabled } from '@poly-agents/shared/feature-flags';
 // Import from session-tools-core
 import {
   type SessionToolContext,
@@ -47,7 +47,7 @@ import {
   // Helpers
   loadSourceConfig as loadSourceConfigFromHelpers,
   errorResponse,
-} from '@craft-agent/session-tools-core';
+} from '@poly-agents/session-tools-core';
 
 // ============================================================
 // Types
@@ -285,7 +285,7 @@ let docsTools: Tool[] = [];
 async function connectDocsUpstream(): Promise<void> {
   try {
     const client = new Client(
-      { name: 'craft-agent-session-proxy', version: '1.0.0' },
+      { name: 'poly-agent-session-proxy', version: '1.0.0' },
       { capabilities: {} }
     );
 
@@ -511,7 +511,7 @@ async function main() {
   // Create MCP server
   const server = new Server(
     {
-      name: 'craft-agent-session',
+      name: 'poly-agent-session',
       version: '0.3.1',
     },
     {

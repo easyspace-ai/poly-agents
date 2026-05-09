@@ -1,11 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import type { Readable } from 'node:stream'
-import { existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { app } from 'electron'
+import { CONFIG_DIR } from '@poly-agents/shared/config/storage'
 import log from '../logger'
 import { setPolyHttpBaseUrl } from './register-poly-ipc'
+import { resolvePolySpawnEnv } from './resolve-poly-spawn-env'
 
 let polyChild: ChildProcess | null = null
 
@@ -86,13 +88,24 @@ export async function startPolyBackendInMain(isClientOnly: boolean): Promise<voi
     return
   }
 
-  const polyDir = join(app.getPath('userData'), 'poly')
+  const polyDir = join(CONFIG_DIR, 'poly')
   mkdirSync(polyDir, { recursive: true })
   const dbPath = join(polyDir, 'app.db')
+  const legacyDbPath = join(app.getPath('userData'), 'poly', 'app.db')
+  if (!existsSync(dbPath) && existsSync(legacyDbPath)) {
+    try {
+      copyFileSync(legacyDbPath, dbPath)
+      log.info({ from: legacyDbPath, to: dbPath }, '[poly] migrated SQLite to CRAFT_CONFIG_DIR')
+    } catch (err) {
+      log.warn({ err, legacyDbPath, dbPath }, '[poly] could not migrate legacy DB; continuing with fresh DB if needed')
+    }
+  }
   const defaultPolyLogFile = join(polyDir, 'poly-bot.log')
 
+  const craftEnv = await resolvePolySpawnEnv()
   const env = {
     ...process.env,
+    ...craftEnv,
     POLY_ELECTRON: '1',
     DATABASE_URL: `file:${dbPath}`,
     POLY_BOT_PACKAGE_ROOT: polyRoot,

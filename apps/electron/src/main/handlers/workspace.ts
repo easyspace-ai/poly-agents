@@ -1,5 +1,5 @@
-import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '@poly-agents/shared/protocol'
+import type { RpcServer } from '@poly-agents/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 
 export const GUI_HANDLED_CHANNELS = [

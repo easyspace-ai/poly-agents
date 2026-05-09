@@ -1,37 +1,16 @@
-# @craft-agent/core
+# @poly-agents/core
 
-Shared TypeScript types and utilities for Craft Agent applications.
-
-## Installation
+## Install
 
 ```bash
-# In a workspace package
-bun add @craft-agent/core
-```
-
-Or add to `package.json`:
-```json
-{
-  "dependencies": {
-    "@craft-agent/core": "workspace:*"
-  }
-}
+bun add @poly-agents/core
 ```
 
 ## Usage
 
-```typescript
-// Import types
-import type {
-  Workspace,
-  Session,
-  Message,
-  TokenUsage,
-  AgentEvent,
-} from '@craft-agent/core';
-
-// Import utilities
-import { generateMessageId, debug } from '@craft-agent/core';
+```ts
+import type { Workspace, Session } from '@poly-agents/core';
+import { generateMessageId, debug } from '@poly-agents/core';
 ```
 
 ## Exported Types

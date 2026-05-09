@@ -10,8 +10,8 @@
  * the decision path directly.
  */
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
-import { createBuiltInConnection } from '@craft-agent/server-core/domain'
-import type { LlmConnectionSetup } from '@craft-agent/shared/protocol'
+import { createBuiltInConnection } from '@poly-agents/server-core/domain'
+import type { LlmConnectionSetup } from '@poly-agents/shared/protocol'
 
 // ============================================================
 // Simulated updateOnly guard logic

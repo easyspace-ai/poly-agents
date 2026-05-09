@@ -2,6 +2,7 @@ import type { RiskPosition, RiskTask as RiskTaskRow } from '../generated/prisma'
 import { ApiError, AssetType } from '@polymarket/clob-client-v2';
 import { prisma } from '../db';
 import { createLogger } from '../logger';
+import { sendPositionClosedNotification } from '../telegram/notify';
 import { getMinOpenRiskShares, resolveStopLossPctForOpenYesCents } from '../effectiveBotSettings';
 import { conditionalBalanceToShareFloat, executePolymarketSell } from '../executor/polymarket';
 import { getPolymarketClobClient } from './polymarketTrading';
@@ -316,6 +317,11 @@ export async function applyClobTradeIfNew(trade: {
         data: { status: 'closed', sizeShares: 0, costUsd: 0 },
       });
       log.info({ assetId, id: existing.id }, 'risk position closed by CLOB sell trade');
+      sendPositionClosedNotification({
+        title: existing.title,
+        sideLabel: existing.sideLabel,
+        reason: 'CLOB 卖出 / 持仓已平',
+      });
     } else {
       const ratio = size / existing.sizeShares;
       const costUsd = Math.max(0, existing.costUsd * (1 - ratio));
@@ -434,7 +440,7 @@ export async function reconcileOpenRiskPositionsWithClobBalances(): Promise<void
   const minShares = getMinOpenRiskShares();
   const rows = await prisma.riskPosition.findMany({
     where: { status: { in: ['open', 'closing'] } },
-    select: { id: true, tokenId: true, sizeShares: true, costUsd: true },
+    select: { id: true, tokenId: true, sizeShares: true, costUsd: true, title: true, sideLabel: true },
   });
   if (rows.length === 0) return;
 
@@ -463,6 +469,11 @@ export async function reconcileOpenRiskPositionsWithClobBalances(): Promise<void
             { id: row.id, tokenId: row.tokenId, onChainShares, minShares },
             'risk: position closed (CLOB balance below minOpenRiskShares)',
           );
+          sendPositionClosedNotification({
+            title: row.title,
+            sideLabel: row.sideLabel,
+            reason: '链上余额低于最小持仓阈值',
+          });
           return;
         }
         if (onChainShares + 1e-9 < row.sizeShares) {
@@ -693,6 +704,11 @@ async function runClosePositionTask(taskId: string, positionId: string): Promise
       data: { status: 'succeeded', lastError: null },
     });
     log.info({ positionId, tokenId: position.tokenId }, 'risk: position closed');
+    sendPositionClosedNotification({
+      title: position.title,
+      sideLabel: position.sideLabel,
+      reason: '平仓任务完成',
+    });
   } catch (err) {
     await prisma.riskPosition.update({
       where: { id: positionId },

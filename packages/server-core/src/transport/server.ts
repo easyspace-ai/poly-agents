@@ -21,10 +21,10 @@ import {
   type MessageEnvelope,
   type PushTarget,
   type ErrorCode,
-} from '@craft-agent/shared/protocol'
+} from '@poly-agents/shared/protocol'
 import type { RpcServer, HandlerFn, RequestContext } from './types'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
-import { createLogger } from '@craft-agent/shared/utils'
+import { createLogger } from '@poly-agents/shared/utils'
 
 // ---------------------------------------------------------------------------
 // Client connection state
