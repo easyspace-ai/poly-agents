@@ -1,5 +1,8 @@
 appId: com.lukilabs.craft-agent
 productName: Craft Agents
+# Main executable on disk (no spaces). Avoids mac rename failures and matches
+# CFBundleExecutable; Finder / menu title still use productName above.
+executableName: CraftAgents
 copyright: Copyright © 2026 Craft Docs Ltd.
 
 electronVersion: "39.2.7"

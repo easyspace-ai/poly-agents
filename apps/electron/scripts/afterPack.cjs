@@ -26,7 +26,20 @@ module.exports = async function afterPack(context) {
   }
 
   const appPath = context.appOutDir;
-  const resourcesDir = path.join(appPath, 'Craft Agents.app', 'Contents', 'Resources');
+  let bundleName;
+  try {
+    const entries = fs.readdirSync(appPath, { withFileTypes: true });
+    const appEntry = entries.find((e) => e.isDirectory() && e.name.endsWith('.app'));
+    bundleName = appEntry?.name;
+  } catch (e) {
+    console.log(`afterPack: could not read ${appPath}: ${e.message}`);
+    return;
+  }
+  if (!bundleName) {
+    console.log(`afterPack: no .app bundle in ${appPath} — skip Assets.car`);
+    return;
+  }
+  const resourcesDir = path.join(appPath, bundleName, 'Contents', 'Resources');
   const precompiledAssets = path.join(context.packager.projectDir, 'resources', 'Assets.car');
 
   console.log(`afterPack: projectDir=${context.packager.projectDir}`);
