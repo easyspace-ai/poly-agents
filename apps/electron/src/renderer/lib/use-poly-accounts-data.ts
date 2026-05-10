@@ -3,7 +3,6 @@ import {
   polyFetchBalances,
   polyFetchHealth,
   polyFetchPolymarketAccounts,
-  polyIsReady,
   type PolyAccountRow,
 } from '@/lib/poly-client'
 
@@ -17,19 +16,11 @@ export function usePolyAccountsData() {
   const reload = React.useCallback(async () => {
     setError(null)
     try {
-      const ok = await polyIsReady()
-      setReady(ok)
-      if (!ok) {
-        setError('Poly backend is not running (install Bun and restart the app).')
-        setAccounts(null)
-        setHealth(null)
-        setCollateralById({})
-        return
-      }
       const h = await polyFetchHealth()
       setHealth(`${h.status}${h.db ? ` · ${h.db}` : ''}`)
       const list = await polyFetchPolymarketAccounts()
       setAccounts(list)
+      setReady(true)
       try {
         const b = await polyFetchBalances()
         const next: Record<string, number | null> = {}
@@ -41,7 +32,10 @@ export function usePolyAccountsData() {
         setCollateralById({})
       }
     } catch (e) {
+      setReady(false)
       setError(e instanceof Error ? e.message : String(e))
+      setAccounts(null)
+      setHealth(null)
       setCollateralById({})
     }
   }, [])

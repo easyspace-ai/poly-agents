@@ -43,7 +43,7 @@ const envSchema = z.object({
   POLYMARKET_PRIVATE_KEY: optStr,
   /** Optional: SX Bet order signing; fixture/orderbook uses SX_BET_API_KEY. */
   SX_PRIVATE_KEY: optStr,
-  POLYGON_RPC_URL: z.string().url().default('https://polygon-rpc.com'),
+  POLYGON_RPC_URL: z.string().url().default('https://polygon-bor-rpc.publicnode.com'),
   SX_NETWORK_RPC_URL: z.string().url().default('https://rpc-rollup.sx.technology'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   PUBLIC_PORT: z.string().optional(),

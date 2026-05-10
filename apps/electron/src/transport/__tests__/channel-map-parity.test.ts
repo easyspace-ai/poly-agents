@@ -29,7 +29,6 @@ type ApiToChannelMapKeys = Exclude<
   | 'changeLanguage' // direct IPC to main process — syncs i18n language
   | 'getFilePath' // renderer-local — webUtils.getPathForFile, no IPC round-trip
   | 'polyHttpRequest' // direct IPC to main — proxies loopback poly bot HTTP
-  | 'polyIsReady' // direct IPC to main — poly subprocess handshake
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string
 

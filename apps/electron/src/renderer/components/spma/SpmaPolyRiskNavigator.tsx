@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 import {
   polyFetchHealth,
   polyFetchRiskOverview,
-  polyIsReady,
   type PolyRiskPositionsPayload,
 } from '@/lib/poly-client'
 
@@ -23,19 +22,15 @@ export function SpmaPolyRiskNavigator({ selectedPositionId }: { selectedPosition
   const reload = React.useCallback(async () => {
     setError(null)
     try {
-      const ok = await polyIsReady()
-      setReady(ok)
-      if (!ok) {
-        setError('Poly backend is not running (install Bun and restart the app).')
-        setRisk(null)
-        setHealth(null)
-        return
-      }
       const [h, pos] = await Promise.all([polyFetchHealth(), polyFetchRiskOverview()])
       setHealth(`${h.status}${h.db ? ` · ${h.db}` : ''}`)
       setRisk(pos)
+      setReady(true)
     } catch (e) {
+      setReady(false)
       setError(e instanceof Error ? e.message : String(e))
+      setRisk(null)
+      setHealth(null)
     }
   }, [])
 

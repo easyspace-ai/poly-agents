@@ -9,7 +9,6 @@ import { cn } from '@/lib/utils'
 import {
   polyFetchHealth,
   polyFetchTradesPage,
-  polyIsReady,
   type PolyTradesPayload,
 } from '@/lib/poly-client'
 
@@ -25,19 +24,15 @@ export function SpmaPolyHistoryNavigator({ selectedTradeId }: { selectedTradeId:
   const reload = React.useCallback(async () => {
     setError(null)
     try {
-      const ok = await polyIsReady()
-      setReady(ok)
-      if (!ok) {
-        setError('Poly backend is not running (install Bun and restart the app).')
-        setTrades(null)
-        setHealth(null)
-        return
-      }
       const [h, tr] = await Promise.all([polyFetchHealth(), polyFetchTradesPage(1, PAGE_SIZE)])
       setHealth(`${h.status}${h.db ? ` · ${h.db}` : ''}`)
       setTrades(tr)
+      setReady(true)
     } catch (e) {
+      setReady(false)
       setError(e instanceof Error ? e.message : String(e))
+      setTrades(null)
+      setHealth(null)
     }
   }, [])
 

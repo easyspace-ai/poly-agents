@@ -11,7 +11,6 @@ import { routes } from '@/lib/navigate'
 import {
   polyFetchHealth,
   polyFetchTradesPage,
-  polyIsReady,
   type PolyTradesPayload,
 } from '@/lib/poly-client'
 
@@ -34,14 +33,6 @@ export function SpmaPolyHistoryMainPanel({ tradeId }: { tradeId: string | null }
     setScanNote(null)
     setSelected(null)
     try {
-      const ok = await polyIsReady()
-      setReady(ok)
-      if (!ok) {
-        setError('Poly backend is not running (install Bun and restart the app).')
-        setSummary(null)
-        setHealth(null)
-        return
-      }
       const h = await polyFetchHealth()
       setHealth(`${h.status}${h.db ? ` · ${h.db}` : ''}`)
 
@@ -49,12 +40,14 @@ export function SpmaPolyHistoryMainPanel({ tradeId }: { tradeId: string | null }
       setSummary(first)
 
       if (!tradeId) {
+        setReady(true)
         return
       }
 
       const onFirst = first.trades.find((x) => x.id === tradeId)
       if (onFirst) {
         setSelected(onFirst)
+        setReady(true)
         return
       }
 
@@ -75,8 +68,12 @@ export function SpmaPolyHistoryMainPanel({ tradeId }: { tradeId: string | null }
       if (!found) {
         setSelected(null)
       }
+      setReady(true)
     } catch (e) {
+      setReady(false)
       setError(e instanceof Error ? e.message : String(e))
+      setSummary(null)
+      setHealth(null)
     }
   }, [tradeId])
 

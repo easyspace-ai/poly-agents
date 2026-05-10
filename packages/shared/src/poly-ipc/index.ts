@@ -4,7 +4,6 @@
  */
 
 export const POLY_IPC_CHANNELS = {
-  IS_READY: 'poly:isReady',
   HTTP_REQUEST: 'poly:httpRequest',
 } as const
 

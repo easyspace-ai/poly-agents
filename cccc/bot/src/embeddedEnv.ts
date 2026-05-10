@@ -22,7 +22,7 @@ export const EMBEDDED_ENV: Partial<Record<string, string>> = {
   POLYMARKET_API_URL: 'https://clob.polymarket.com',
  
   SX_PRIVATE_KEY: '0x' + '0'.repeat(64),
-  POLYGON_RPC_URL: 'https://polygon-rpc.com',
+  POLYGON_RPC_URL: 'https://polygon-bor-rpc.publicnode.com',
   SX_NETWORK_RPC_URL: 'https://rpc-rollup.sx.technology'
 
  };

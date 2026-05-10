@@ -119,7 +119,6 @@ export abstract class BaseWebSocketClient extends TypedEventEmitter<BaseEventMap
     const message = typeof data === 'string' ? data : JSON.stringify(data);
     this.ws.send(message);
   }
-
   /**
    * Create the WebSocket connection
    */
@@ -132,17 +131,55 @@ export abstract class BaseWebSocketClient extends TypedEventEmitter<BaseEventMap
           handshakeTimeout: this.options.connectionTimeout,
         };
 
-        if (this.options.proxyUrl) {
-          const agentOptions = this.options.proxyHeaders
-            ? { headers: this.options.proxyHeaders }
-            : undefined;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          wsOptions.agent = new HttpsProxyAgent(this.options.proxyUrl, agentOptions) as any;
+        // prepare headers from options if any
+        if ((this.options as any).headers) {
+          wsOptions.headers = (this.options as any).headers;
         }
 
-        this.ws = new WebSocket(this.options.url, wsOptions);
+        // Proxy handling: create an agent compatible with https-proxy-agent common signatures.
+        if (this.options.proxyUrl) {
+          try {
+            // https-proxy-agent accepts either a proxy URL string or an options object.
+            // Prefer simple URL string to maximize compatibility.
+            // If proxyHeaders provided, merge them into wsOptions.headers so they are sent during the WS handshake.
+            if (this.options.proxyHeaders) {
+              wsOptions.headers = Object.assign({}, wsOptions.headers || {}, this.options.proxyHeaders);
+            }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            wsOptions.agent = new HttpsProxyAgent(this.options.proxyUrl) as any;
+          } catch (agentErr) {
+            // agent construction failed — surface this error
+            const err = agentErr instanceof Error ? agentErr : new Error(String(agentErr));
+            this.handleError(err);
+            reject(err);
+            return;
+          }
+        }
+
+        // Note: ws constructor signature: new WebSocket(address, [protocols], [options])
+        const protocols = (this.options as any).subprotocols || undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.ws = protocols
+          ? new WebSocket(this.options.url, protocols as any, wsOptions)
+          : new WebSocket(this.options.url, wsOptions);
+
+        // debug/logging to help diagnose handshake issues (do not expose sensitive headers)
+        try {
+          const debugInfo = {
+            url: this.options.url,
+            viaProxy: !!this.options.proxyUrl,
+            hasAgent: !!wsOptions.agent,
+            headerKeys: wsOptions.headers ? Object.keys(wsOptions.headers) : [],
+            timeout: this.options.connectionTimeout,
+          };
+          this.emit('debug', debugInfo as unknown as Record<string, unknown>);
+        } catch (_) {}
+
+        let settled = false;
 
         this.ws.onopen = () => {
+          if (settled) return;
+          settled = true;
           this.clearConnectionTimeout();
           this.reconnectAttempts = 0;
           this.setState('connected');
@@ -154,9 +191,24 @@ export abstract class BaseWebSocketClient extends TypedEventEmitter<BaseEventMap
         };
 
         this.ws.onclose = (event: WebSocket.CloseEvent) => {
-          this.clearConnectionTimeout();
+          // If not yet resolved/rejected, reject to avoid hanging connection promise
+          if (!settled) {
+            settled = true;
+            const err = new Error(`WebSocket closed during connect (code=${event.code}, reason=${event.reason})`);
+            this.clearConnectionTimeout();
+            this.handleError(err);
+            reject(err);
+            // continue to normal close handling after reject
+          } else {
+            this.clearConnectionTimeout();
+          }
+
           this.stopHeartbeat();
-          this.emit('disconnected', { code: event.code, reason: event.reason });
+          this.emit('disconnected', {
+            code: event.code,
+            reason: event.reason,
+            viaProxy: !!this.options.proxyUrl,
+          });
           this.onDisconnected(event.code, event.reason);
 
           if (!this.isIntentionalClose && this.options.autoReconnect) {
@@ -166,25 +218,52 @@ export abstract class BaseWebSocketClient extends TypedEventEmitter<BaseEventMap
           }
         };
 
-        this.ws.onerror = () => {
-          const error = new Error('WebSocket error');
-          this.handleError(error);
+        this.ws.onerror = (errEvent: unknown) => {
+          // Provide as much detail as available
+          const err =
+            errEvent instanceof Error
+              ? errEvent
+              : errEvent && typeof errEvent === 'object' && 'message' in (errEvent as any)
+              ? new Error((errEvent as any).message)
+              : new Error('WebSocket error');
+
+          // If connection phase still ongoing, reject promise so caller knows
+          if (!settled) {
+            settled = true;
+            this.clearConnectionTimeout();
+            try {
+              // attempt to close socket if it's still there
+              this.ws?.close();
+            } catch (_) {}
+            this.handleError(err);
+            reject(err);
+            return;
+          }
+
+          // Otherwise just emit and handle error
+          this.handleError(err);
         };
 
         this.ws.onmessage = (event: WebSocket.MessageEvent) => {
           this.handleIncomingMessage(event.data as string);
         };
 
+        // connection timeout: ensure we reject once timeout reached
         this.connectionTimer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
           const error = new Error(`Connection timeout after ${this.options.connectionTimeout}ms`);
           this.handleError(error);
-          this.ws?.close();
+          try {
+            this.ws?.terminate();
+          } catch (_) {}
           reject(error);
         }, this.options.connectionTimeout);
       } catch (error) {
         this.clearConnectionTimeout();
-        this.handleError(error instanceof Error ? error : new Error(String(error)));
-        reject(error);
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.handleError(err);
+        reject(err);
       }
     });
   }

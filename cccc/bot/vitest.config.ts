@@ -20,7 +20,7 @@ export default defineConfig({
       POLYMARKET_API_KEY: 'test-key',
       POLYMARKET_SECRET: 'test-secret',
       POLYMARKET_PASSPHRASE: 'test-passphrase',
-      POLYGON_RPC_URL: 'https://polygon-rpc.com',
+      POLYGON_RPC_URL: 'https://polygon-bor-rpc.publicnode.com',
       LOG_LEVEL: 'silent',
     },
   },

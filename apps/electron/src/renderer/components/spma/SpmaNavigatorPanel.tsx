@@ -6,7 +6,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { PolyTab } from '../../../shared/types'
-import { polyFetchHealth, polyFetchSetupStatus, polyIsReady, type PolySetupStatus } from '../../lib/poly-client'
+import { polyFetchHealth, polyFetchSetupStatus, type PolySetupStatus } from '../../lib/poly-client'
 import { SpmaPolySetupGateInline } from '@/components/spma/SpmaPolySetupGateInline'
 
 const TAB_KEYS: Record<PolyTab, string> = {
@@ -28,11 +28,6 @@ export function SpmaNavigatorPanel({ tab }: { tab: PolyTab }) {
   const reloadSetup = useCallback(async () => {
     if (tab !== 'setup') return
     try {
-      const ok = await polyIsReady()
-      if (!ok) {
-        setPolySetup(null)
-        return
-      }
       setPolySetup(await polyFetchSetupStatus())
     } catch {
       setPolySetup(null)
@@ -52,21 +47,18 @@ export function SpmaNavigatorPanel({ tab }: { tab: PolyTab }) {
       }
     }
 
+    setReady(null)
+
     ;(async () => {
       try {
-        const ok = await polyIsReady()
-        if (cancelled) return
-        setReady(ok)
-        if (!ok) {
-          setError('Poly backend is not running (install Bun and restart the app).')
-          return
-        }
         const [h, st] = await Promise.all([polyFetchHealth(), polyFetchSetupStatus()])
         if (cancelled) return
+        setReady(true)
         setHealth(`${h.status}${h.db ? ` · ${h.db}` : ''}`)
         setPolySetup(st)
       } catch (e) {
         if (cancelled) return
+        setReady(false)
         setError(e instanceof Error ? e.message : String(e))
       }
     })()

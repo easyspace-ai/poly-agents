@@ -1,3 +1,5 @@
+import i18next from 'i18next'
+
 export type PolyHealth = { status: string; db?: string; message?: string }
 
 export type PolySetupStatus = {
@@ -104,10 +106,6 @@ export type PolyBalancesPayload = {
   polymarketAccounts: PolyBalanceAccountRow[]
 }
 
-export async function polyIsReady(): Promise<boolean> {
-  return window.electronAPI.polyIsReady()
-}
-
 function buildPathWithQuery(path: string, query?: Record<string, string | number | boolean | undefined>): string {
   if (!query || Object.keys(query).length === 0) return path
   const params = new URLSearchParams()
@@ -125,6 +123,11 @@ function polyErrorMessageFromEnvelope(res: {
   json?: unknown
   text?: string
 }): string {
+  if (res.text === 'poly_not_ready') {
+    return i18next.isInitialized
+      ? i18next.t('settings.poly.notRunning')
+      : 'The poly trading subprocess is not running. Restart the app with Bun available for the poly child, or check logs for [poly].'
+  }
   if (typeof res.json === 'object' && res.json !== null) {
     const j = res.json as { message?: unknown; error?: unknown }
     if (typeof j.message === 'string' && j.message.length > 0) return j.message

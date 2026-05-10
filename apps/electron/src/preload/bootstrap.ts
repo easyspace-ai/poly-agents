@@ -437,6 +437,5 @@ client.onConnectionStateChanged((state) => {
 }
 
 ;(api as ElectronAPI).polyHttpRequest = (spec) => ipcRenderer.invoke(POLY_IPC_CHANNELS.HTTP_REQUEST, spec)
-;(api as ElectronAPI).polyIsReady = () => ipcRenderer.invoke(POLY_IPC_CHANNELS.IS_READY)
 
 contextBridge.exposeInMainWorld('electronAPI', api)

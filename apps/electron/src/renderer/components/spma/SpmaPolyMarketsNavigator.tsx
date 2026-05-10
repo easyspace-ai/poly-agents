@@ -17,7 +17,6 @@ import {
   polyFetchHealth,
   polyFetchMarkets,
   polyFetchSetupStatus,
-  polyIsReady,
   type PolyMarketRow,
   type PolySetupStatus,
 } from '@/lib/poly-client'
@@ -65,15 +64,6 @@ export function SpmaPolyMarketsNavigator({ selectedMarketId }: { selectedMarketI
   const reload = React.useCallback(async () => {
     setError(null)
     try {
-      const ok = await polyIsReady()
-      setReady(ok)
-      if (!ok) {
-        setError('Poly backend is not running (install Bun and restart the app).')
-        setMarkets(null)
-        setHealth(null)
-        setSetup(null)
-        return
-      }
       const [h, st, list, cfg] = await Promise.all([
         polyFetchHealth(),
         polyFetchSetupStatus(),
@@ -85,8 +75,13 @@ export function SpmaPolyMarketsNavigator({ selectedMarketId }: { selectedMarketI
       setMarkets(list)
       const raw = cfg.find((r) => r.key === 'eventClassificationTags')?.value ?? ''
       setEventTags(parseEventClassificationTags(raw))
+      setReady(true)
     } catch (e) {
+      setReady(false)
       setError(e instanceof Error ? e.message : String(e))
+      setMarkets(null)
+      setHealth(null)
+      setSetup(null)
     }
   }, [])
 

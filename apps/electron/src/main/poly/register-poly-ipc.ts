@@ -9,8 +9,6 @@ export function setPolyHttpBaseUrl(url: string | null): void {
 }
 
 export function registerPolyIpcHandlers(): void {
-  ipcMain.handle(POLY_IPC_CHANNELS.IS_READY, async () => Boolean(polyBaseUrl))
-
   ipcMain.handle(POLY_IPC_CHANNELS.HTTP_REQUEST, async (_event, raw: unknown): Promise<PolyHttpResponseEnvelope> => {
     if (!polyBaseUrl) {
       return { ok: false, status: 503, text: 'poly_not_ready' }

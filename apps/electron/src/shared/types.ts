@@ -702,7 +702,6 @@ export interface ElectronAPI {
    * `path` must start with `/api/`.
    */
   polyHttpRequest(spec: PolyHttpRequestSpec): Promise<PolyHttpResponseEnvelope>
-  polyIsReady(): Promise<boolean>
 }
 
 export interface MessagingPlatformRuntimeInfo {

@@ -12,7 +12,6 @@ import {
   polyFetchHealth,
   polyFetchRiskOverview,
   polyFetchRiskTasks,
-  polyIsReady,
   type PolyRiskPositionRow,
   type PolyRiskPositionsPayload,
   type PolyRiskTasksPayload,
@@ -29,15 +28,6 @@ export function SpmaPolyRiskMainPanel({ positionId }: { positionId: string | nul
   const reload = React.useCallback(async () => {
     setError(null)
     try {
-      const ok = await polyIsReady()
-      setReady(ok)
-      if (!ok) {
-        setError('Poly backend is not running (install Bun and restart the app).')
-        setRisk(null)
-        setRiskTasks(null)
-        setHealth(null)
-        return
-      }
       const [h, pos, tasks] = await Promise.all([
         polyFetchHealth(),
         polyFetchRiskOverview(),
@@ -46,8 +36,13 @@ export function SpmaPolyRiskMainPanel({ positionId }: { positionId: string | nul
       setHealth(`${h.status}${h.db ? ` · ${h.db}` : ''}`)
       setRisk(pos)
       setRiskTasks(tasks)
+      setReady(true)
     } catch (e) {
+      setReady(false)
       setError(e instanceof Error ? e.message : String(e))
+      setRisk(null)
+      setRiskTasks(null)
+      setHealth(null)
     }
   }, [])
 

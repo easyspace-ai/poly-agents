@@ -34,7 +34,6 @@ import {
   polyFetchRiskOverview,
   polyFetchSetupStatus,
   polyFetchTradesPage,
-  polyIsReady,
   polyPostSetupComplete,
   polyPutConfigKey,
   type PolyConfigRow,
@@ -199,25 +198,20 @@ export default function PolySettingsPage() {
     setBootLoading(true)
     setBootError(null)
     try {
-      const ok = await polyIsReady()
-      setReady(ok)
-      if (!ok) {
-        setBootError(t('settings.poly.notRunning'))
-        setSetupStatus(null)
-        return
-      }
       await Promise.all([reloadConfig({ silent: true }), reloadSnapshot()])
       try {
         setSetupStatus(await polyFetchSetupStatus())
       } catch {
         setSetupStatus(null)
       }
+      setReady(true)
     } catch (e) {
+      setReady(false)
       setBootError(e instanceof Error ? e.message : String(e))
     } finally {
       setBootLoading(false)
     }
-  }, [reloadConfig, reloadSnapshot, t])
+  }, [reloadConfig, reloadSnapshot])
 
   React.useEffect(() => {
     void boot()
